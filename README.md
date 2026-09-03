@@ -64,13 +64,18 @@ echo "fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-yocto-inot
 
 ---
 
-## 2. Building the System Image
+### Step 1: Clone Required Yocto Layers
+To automatically clone all required Yocto Kirkstone layer dependencies (`poky`, `meta-openembedded`, `meta-freescale`, `meta-qt5`, `meta-swupdate`), run:
+```bash
+./setup-layers.sh
+```
 
-### Step 1: Initialize the Yocto Environment
+### Step 2: Initialize the Yocto Environment
 From the top-level repository folder:
 ```bash
 source poky/oe-init-build-env build-hmi
 ```
+
 
 ### Step 2: Build the Core Image
 ```bash
