@@ -1,0 +1,9 @@
+[Match]
+Name=eth0 eth1
+
+[Network]
+DHCP=yes
+LinkLocalAddressing=yes
+IPv4LL=yes
+MulticastDNS=yes
+LLMNR=yes

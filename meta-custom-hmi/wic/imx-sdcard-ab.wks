@@ -1,0 +1,13 @@
+# Short-description: Dual-bank A/B partitioning scheme for SWUpdate OTA
+# Long-description: Creates a 4-partition layout:
+# Partition 1: Boot (64MB)
+# Partition 2: RootFS_A (1.5GB active partition)
+# Partition 3: RootFS_B (1.5GB backup/OTA update target)
+# Partition 4: UserData (Persistent storage)
+
+part /boot --source bootimg-partition --ondisk mmcblk --fstype=vfat --label boot --active --align 4096 --size 64
+part / --source rootfs --ondisk mmcblk --fstype=ext4 --label rootfs_a --align 4096 --size 1500M
+part --ondisk mmcblk --fstype=ext4 --label rootfs_b --align 4096 --size 1500M
+part /data --ondisk mmcblk --fstype=ext4 --label data --align 4096 --size 500M
+
+bootloader --ptable msdos

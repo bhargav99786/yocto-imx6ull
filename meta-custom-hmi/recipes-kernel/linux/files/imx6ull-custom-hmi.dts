@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2026 Custom HMI Solutions
+ * Device Tree for Custom i.MX6ULL HMI Board (Forlinx OKMX6ULL-C derived)
+ */
+
+/dts-v1/;
+
+#include "imx6ull-14x14-evk.dts"
+
+/ {
+	model = "Custom i.MX6ULL HMI Board (Forlinx OKMX6ULL-C Derived)";
+	compatible = "fsl,imx6ull-14x14-evk", "fsl,imx6ull";
+
+	chosen {
+		stdout-path = &uart1;
+	};
+};
+
+/* Parallel 7" / 10" RGB LCD Configuration */
+&lcdif {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_lcdif_dat
+		     &pinctrl_lcdif_ctrl>;
+	display = <&display0>;
+	status = "okay";
+
+	display0: display0 {
+		bits-per-pixel = <24>;
+		bus-width = <24>;
+
+		display-timings {
+			native-mode = <&timing0>;
+
+			timing0: timing0 {
+				clock-frequency = <33000000>;
+				hactive = <800>;
+				vactive = <480>;
+				hback-porch = <88>;
+				hfront-porch = <40>;
+				hsync-len = <48>;
+				vback-porch = <32>;
+				vfront-porch = <13>;
+				vsync-len = <3>;
+
+				hsync-active = <0>;
+				vsync-active = <0>;
+				de-active = <1>;
+				pixelclk-active = <0>;
+			};
+		};
+	};
+};
+
+/* I2C1 Bus: Capacitive Touch (GT911) & Real-Time Clock (PCF8563) */
+&i2c1 {
+	clock-frequency = <100000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1>;
+	status = "okay";
+
+	/* Goodix GT911 / FT5x06 Capacitive Touchscreen */
+	gt911: touchscreen@14 {
+		compatible = "goodix,gt911";
+		reg = <0x14>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <9 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
+		status = "okay";
+	};
+
+	/* PCF8563 Real-Time Clock */
+	pcf8563: rtc@51 {
+		compatible = "nxp,pcf8563";
+		reg = <0x51>;
+		status = "okay";
+	};
+};
+
+/* Dual Ethernet (FEC1 & FEC2) */
+&fec1 {
+	status = "okay";
+};
+
+&fec2 {
+	status = "okay";
+};

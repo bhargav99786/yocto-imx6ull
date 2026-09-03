@@ -1,0 +1,15 @@
+# Yocto Build Artifacts & Large Cache Directories
+build-hmi/tmp/
+build-hmi/downloads/
+build-hmi/sstate-cache/
+build-hmi/cache/
+build-hmi/bitbake-cookerdaemon.log
+build-hmi/*.lock
+build-hmi/*.sock
+
+# Temporary & Editor files
+*.swp
+*~
+.DS_Store
+.idea/
+.vscode/
