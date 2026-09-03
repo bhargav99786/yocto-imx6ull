@@ -13,9 +13,17 @@
 	compatible = "fsl,imx6ull-14x14-evk", "fsl,imx6ull";
 
 	chosen {
-		stdout-path = &uart1;
+		stdout-path = &uart2;
 	};
 };
+
+/* UART2 Serial Console Monitor (/dev/ttymxc1) */
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart2>;
+	status = "okay";
+};
+
 
 /* Parallel 7" / 10" RGB LCD Configuration */
 &lcdif {
