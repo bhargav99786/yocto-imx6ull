@@ -1,11 +1,11 @@
 From 8e5f49d332612a4c16a81bf6d1396b27d422ad4e Mon Sep 17 00:00:00 2001
 From: Bhargav <bhargav@custom-hmi.local>
 Date: Mon, 7 Sep 2026 11:15:00 +0530
-Subject: [PATCH] goodix: add retries to i2c transfers and skip fallback wait
+Subject: [PATCH] goodix: add retries, interrupt storm recovery, and skip fallback wait
 
 ---
 diff --git a/drivers/input/touchscreen/goodix.c b/drivers/input/touchscreen/goodix.c
-index 25e575183dd1..d8b0e1048695 100644
+index 25e575183dd1..b56f29c1afb0 100644
 --- a/drivers/input/touchscreen/goodix.c
 +++ b/drivers/input/touchscreen/goodix.c
 @@ -170,7 +170,7 @@ int goodix_i2c_read(struct i2c_client *client, u16 reg, u8 *buf, int len)
@@ -76,22 +76,61 @@ index 25e575183dd1..d8b0e1048695 100644
  	return ret;
  }
  
-@@ -506,9 +513,13 @@ static void goodix_process_events(struct goodix_ts_data *ts)
+@@ -497,6 +504,8 @@ static void goodix_process_events(struct goodix_ts_data *ts)
+ 	input_sync(ts->input_dev);
+ }
+ 
++static int goodix_reset(struct goodix_ts_data *ts);
++
+ /**
+  * goodix_ts_irq_handler - The IRQ handler
+  *
+@@ -506,9 +515,24 @@ static void goodix_process_events(struct goodix_ts_data *ts)
  static irqreturn_t goodix_ts_irq_handler(int irq, void *dev_id)
  {
  	struct goodix_ts_data *ts = dev_id;
-+	int retry = 3;
++	int retry = 5;
++	int ret = -1;
  
  	goodix_process_events(ts);
 -	goodix_i2c_write_u8(ts->client, GOODIX_READ_COOR_ADDR, 0);
 +
 +	/* Ensure 0x814E is cleared so GT911 releases INT pin */
-+	while (retry-- && goodix_i2c_write_u8(ts->client, GOODIX_READ_COOR_ADDR, 0) < 0)
-+		usleep_range(500, 1000);
++	while (retry-- && ret < 0) {
++		ret = goodix_i2c_write_u8(ts->client, GOODIX_READ_COOR_ADDR, 0);
++		if (ret < 0)
++			usleep_range(1000, 2000);
++	}
++
++	/* If clearing 0x814E failed after all retries, reset controller to break interrupt storm */
++	if (ret < 0) {
++		dev_warn_ratelimited(&ts->client->dev,
++			"Failed to clear 0x814E buffer status, resetting controller\n");
++		goodix_reset(ts);
++	}
  
  	return IRQ_HANDLED;
  }
-@@ -1382,7 +1393,7 @@ static int goodix_ts_probe(struct i2c_client *client,
+@@ -771,15 +795,10 @@ int goodix_reset_no_int_sync(struct goodix_ts_data *ts)
+ 	usleep_range(6000, 10000);		/* T4: > 5ms */
+ 
+ 	/*
+-	 * Put the reset pin back in to input / high-impedance mode to save
+-	 * power. Only do this in the non ACPI case since some ACPI boards
+-	 * don't have a pull-up, so there the reset pin must stay active-high.
++	 * Keep the reset pin driven active-high instead of floating input
++	 * to prevent EMI noise from glitching the reset line during touch.
+ 	 */
+-	if (ts->irq_pin_access_method == IRQ_PIN_ACCESS_GPIO) {
+-		error = gpiod_direction_input(ts->gpiod_rst);
+-		if (error)
+-			goto error;
+-	}
++	gpiod_direction_output(ts->gpiod_rst, 1);
+ 
+ 	return 0;
+ 
+@@ -1382,7 +1401,7 @@ static int goodix_ts_probe(struct i2c_client *client,
  			snprintf(ts->cfg_name, sizeof(ts->cfg_name),
  				 "goodix_%s_cfg.bin", ts->id);
  
