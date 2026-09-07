@@ -10,6 +10,7 @@ Environment=QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0
 Environment=QT_QPA_GENERIC_PLUGINS=evdevtouch:/dev/input/touchscreen0
 Environment=QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS=/dev/input/touchscreen0
 Environment=QT_QPA_FB_NO_LIBINPUT=1
+ExecStartPre=/bin/sh -c 'echo 7 > /sys/class/backlight/backlight/brightness 2>/dev/null || true; echo 0 > /sys/class/backlight/backlight/bl_power 2>/dev/null || true'
 ExecStart=/usr/bin/hmi-app
 Restart=always
 RestartSec=1
