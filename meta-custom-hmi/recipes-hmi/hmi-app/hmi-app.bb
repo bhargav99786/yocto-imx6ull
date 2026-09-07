@@ -1,20 +1,47 @@
-SUMMARY = "Custom Qt 5.15 HMI Application Launcher Service"
+SUMMARY = "Custom Qt 5.15 HMI Desktop Application"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
+DEPENDS += "qtbase"
+
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRC_URI = "file://hmi-app.service"
+SRC_URI = " \
+    file://hmi-app.pro \
+    file://main.cpp \
+    file://mainwindow.h \
+    file://mainwindow.cpp \
+    file://touchcanvas.h \
+    file://touchcanvas.cpp \
+    file://hmi-app.service \
+    file://hmi-app.init \
+    file://99-goodix.rules \
+"
 
-inherit systemd
+S = "${WORKDIR}"
+
+inherit qmake5 systemd update-rc.d
 
 SYSTEMD_SERVICE:${PN} = "hmi-app.service"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 
-do_install() {
-    install -d ${D}/opt/hmi
+INITSCRIPT_NAME = "hmi-app"
+INITSCRIPT_PARAMS = "defaults 99"
+
+do_install:append() {
+    install -d ${D}${sysconfdir}/init.d
+    install -m 0755 ${WORKDIR}/hmi-app.init ${D}${sysconfdir}/init.d/hmi-app
+
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${WORKDIR}/hmi-app.service ${D}${systemd_system_unitdir}/
+
+    install -d ${D}${sysconfdir}/udev/rules.d
+    install -m 0644 ${WORKDIR}/99-goodix.rules ${D}${sysconfdir}/udev/rules.d/99-goodix.rules
 }
 
-FILES:${PN} += "/opt/hmi ${systemd_system_unitdir}/hmi-app.service"
+FILES:${PN} += " \
+    ${bindir}/hmi-app \
+    ${sysconfdir}/init.d/hmi-app \
+    ${systemd_system_unitdir}/hmi-app.service \
+    ${sysconfdir}/udev/rules.d/99-goodix.rules \
+"

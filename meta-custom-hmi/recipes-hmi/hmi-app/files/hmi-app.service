@@ -1,14 +1,16 @@
 [Unit]
-Description=Fast-Boot Custom Qt 5.15 HMI Application
+Description=Fast-Boot Custom Qt 5.15 HMI Desktop Application
 DefaultDependencies=no
 After=systemd-udev-trigger.service systemd-modules-load.service
 Before=multi-user.target
 
 [Service]
 Type=simple
-Environment=QT_QPA_PLATFORM=linuxfb
-Environment=QT_QPA_GENERIC_PLUGINS=evdevtouch:/dev/input/event0
-ExecStart=/opt/hmi/hmi-app
+Environment=QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0
+Environment=QT_QPA_GENERIC_PLUGINS=evdevtouch:/dev/input/touchscreen0
+Environment=QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS=/dev/input/touchscreen0
+Environment=QT_QPA_FB_NO_LIBINPUT=1
+ExecStart=/usr/bin/hmi-app
 Restart=always
 RestartSec=1
 

@@ -13,7 +13,7 @@
 	compatible = "fsl,imx6ull-14x14-evk", "fsl,imx6ull";
 
 	chosen {
-		stdout-path = &uart6;
+		stdout-path = &uart1;
 	};
 };
 
@@ -26,17 +26,17 @@
 	};
 };
 
-/* Primary Serial Debug Console on P17 Pins 7 & 9 (UART6 /dev/ttymxc5) */
-&uart6 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_uart6>;
-	status = "okay";
-};
-
-/* UART1 USB Debug Port (/dev/ttymxc0) */
+/* UART1 Primary Serial Debug Console (USB Debug on Pins 7 & 9, /dev/ttymxc0) */
 &uart1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart1>;
+	status = "okay";
+};
+
+/* Secondary Serial Console (UART6 /dev/ttymxc5) */
+&uart6 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart6>;
 	status = "okay";
 };
 
@@ -49,38 +49,36 @@
 
 
 /* Parallel 7" / 10" RGB LCD Configuration (1024x600 @ 51.2 MHz) */
+/ {
+	panel {
+		compatible = "panel-dpi";
+		backlight = <&backlight_display>;
+		status = "okay";
+
+		panel-timing {
+			clock-frequency = <51200000>;
+			hactive = <1024>;
+			vactive = <600>;
+			hfront-porch = <160>;
+			hback-porch = <160>;
+			hsync-len = <1>;
+			vback-porch = <23>;
+			vfront-porch = <12>;
+			vsync-len = <1>;
+
+			hsync-active = <0>;
+			vsync-active = <0>;
+			de-active = <1>;
+			pixelclk-active = <0>;
+		};
+	};
+};
+
 &lcdif {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_lcdif_dat
 		     &pinctrl_lcdif_ctrl>;
-	display = <&display0>;
 	status = "okay";
-
-	display0: display0 {
-		bits-per-pixel = <24>;
-		bus-width = <24>;
-
-		display-timings {
-			native-mode = <&timing0>;
-
-			timing0: timing0 {
-				clock-frequency = <51200000>;
-				hactive = <1024>;
-				vactive = <600>;
-				hfront-porch = <160>;
-				hback-porch = <160>;
-				hsync-len = <1>;
-				vback-porch = <23>;
-				vfront-porch = <12>;
-				vsync-len = <1>;
-
-				hsync-active = <0>;
-				vsync-active = <0>;
-				de-active = <1>;
-				pixelclk-active = <0>;
-			};
-		};
-	};
 };
 
 /* I2C1 Bus (P17 Pins 7 & 9): Goodix GT911 Capacitive Touch (0x5d) & PCF8563 RTC (0x51) */
@@ -91,12 +89,13 @@
 	status = "okay";
 
 	/* Goodix GT911 / GT9xx Capacitive Touchscreen */
-	goodix_ts@5d {
+	goodix_ts@14 {
 		compatible = "goodix,gt911", "goodix,gt9xx";
-		reg = <0x5d>;
+		reg = <0x14>;
 		interrupt-parent = <&gpio5>;
 		interrupts = <1 IRQ_TYPE_EDGE_FALLING>;
-		reset-gpios = <&gpio5 0 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&gpio5 0 GPIO_ACTIVE_HIGH>;
+		irq-gpios = <&gpio5 1 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
 
