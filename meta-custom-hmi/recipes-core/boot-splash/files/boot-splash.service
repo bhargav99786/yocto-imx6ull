@@ -7,7 +7,9 @@ Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
+ExecStartPre=/bin/sh -c 'echo -1 > /sys/class/firmware/goodix_911_cfg.bin/loading 2>/dev/null || true'
 ExecStart=/bin/sh -c 'if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then cat /etc/boot_logo.raw > /dev/fb0; fi'
+
 RemainAfterExit=yes
 
 [Install]
