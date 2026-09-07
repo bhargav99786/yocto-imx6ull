@@ -7,9 +7,19 @@ Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
-ExecStartPre=/bin/sh -c 'echo -1 > /sys/class/firmware/goodix_911_cfg.bin/loading 2>/dev/null || true; echo 0 > /sys/class/graphics/fbcon/cursor_blink 2>/dev/null || true; printf "\033[?25l" > /dev/tty0 2>/dev/null || true'
-ExecStart=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then cat /etc/boot_logo.raw > /dev/fb0; echo 7 > /sys/class/backlight/backlight/brightness 2>/dev/null; echo 0 > /sys/class/backlight/backlight/bl_power 2>/dev/null; printf "\033[?25l" > /dev/tty0 2>/dev/null; break; fi; sleep 0.1; done'
-
+ExecStartPre=/bin/sh -c 'echo -1 > /sys/class/firmware/goodix_911_cfg.bin/loading 2>/dev/null || true'
+ExecStart=/bin/sh -c '\
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+        if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then \
+            echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true; \
+            cat /etc/boot_logo.raw > /dev/fb0; \
+            for b in /sys/class/backlight/*; do \
+                [ -d "$b" ] && echo 7 > "$b/brightness" 2>/dev/null && echo 0 > "$b/bl_power" 2>/dev/null || true; \
+            done; \
+            break; \
+        fi; \
+        sleep 0.1; \
+    done'
 RemainAfterExit=yes
 
 [Install]
