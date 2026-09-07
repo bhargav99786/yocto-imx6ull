@@ -1,0 +1,14 @@
+[Unit]
+Description=Instant Power-On Boot Splash (MarknStamp 1024x600)
+DefaultDependencies=no
+After=systemd-udev-settle.service dev-fb0.device
+Before=basic.target hmi-app.service
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then cat /etc/boot_logo.raw > /dev/fb0; fi'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
