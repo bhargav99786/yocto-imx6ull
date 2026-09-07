@@ -1,16 +1,15 @@
 [Unit]
 Description=Instant Power-On Boot Splash (MarknStamp 1024x600)
 DefaultDependencies=no
-After=systemd-udev-settle.service dev-fb0.device
+After=systemd-udev-trigger.service
 Before=basic.target hmi-app.service
 Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
 ExecStartPre=/bin/sh -c 'echo -1 > /sys/class/firmware/goodix_911_cfg.bin/loading 2>/dev/null || true'
-ExecStart=/bin/sh -c 'if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then cat /etc/boot_logo.raw > /dev/fb0; fi'
-
+ExecStart=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then cat /etc/boot_logo.raw > /dev/fb0; echo 7 > /sys/class/backlight/backlight/brightness 2>/dev/null; break; fi; sleep 0.1; done'
 RemainAfterExit=yes
 
 [Install]
-WantedBy=sysinit.target
+WantedBy=basic.target
