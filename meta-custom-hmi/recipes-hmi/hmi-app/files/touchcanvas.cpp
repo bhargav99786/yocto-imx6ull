@@ -55,6 +55,7 @@ void TouchCanvas::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         m_lastPoint = event->pos();
+        m_lastEmittedPos = event->pos();
         m_drawing = true;
         drawLineTo(event->pos());
         emit touchCoordinatesChanged(event->x(), event->y(), true);
@@ -65,7 +66,10 @@ void TouchCanvas::mouseMoveEvent(QMouseEvent *event)
 {
     if ((event->buttons() & Qt::LeftButton) && m_drawing) {
         drawLineTo(event->pos());
-        emit touchCoordinatesChanged(event->x(), event->y(), true);
+        if ((event->pos() - m_lastEmittedPos).manhattanLength() > 20) {
+            m_lastEmittedPos = event->pos();
+            emit touchCoordinatesChanged(event->x(), event->y(), true);
+        }
     }
 }
 
@@ -74,6 +78,7 @@ void TouchCanvas::mouseReleaseEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton && m_drawing) {
         drawLineTo(event->pos());
         m_drawing = false;
+        m_lastEmittedPos = event->pos();
         emit touchCoordinatesChanged(event->x(), event->y(), false);
     }
 }

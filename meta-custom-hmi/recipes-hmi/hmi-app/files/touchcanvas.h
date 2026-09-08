@@ -34,6 +34,7 @@ private:
 
     QImage m_image;
     QPoint m_lastPoint;
+    QPoint m_lastEmittedPos;
     QColor m_penColor;
     int m_penWidth;
     bool m_drawing;
