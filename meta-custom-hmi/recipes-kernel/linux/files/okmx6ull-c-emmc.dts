@@ -329,6 +329,8 @@ sound1 {
         interrupts = <1 IRQ_TYPE_EDGE_FALLING>;
         reset-gpios = <&gpio5 0 GPIO_ACTIVE_HIGH>;
         irq-gpios = <&gpio5 1 GPIO_ACTIVE_HIGH>;
+        touchscreen-size-x = <1024>;
+        touchscreen-size-y = <600>;
         goodix,cfg-group0 = [
                 42 D0 02 00 05 05 75 01 01 0F 24 
                 0F 64 3C 03 05 00 00 00 02 00 00 

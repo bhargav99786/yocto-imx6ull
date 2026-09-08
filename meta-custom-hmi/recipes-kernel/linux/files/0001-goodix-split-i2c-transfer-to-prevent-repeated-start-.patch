@@ -1,141 +1,98 @@
-From 8e5f49d332612a4c16a81bf6d1396b27d422ad4e Mon Sep 17 00:00:00 2001
-From: Bhargav <bhargav@custom-hmi.local>
-Date: Mon, 7 Sep 2026 11:15:00 +0530
-Subject: [PATCH] goodix: add retries, interrupt storm recovery, and skip fallback wait
-
----
 diff --git a/drivers/input/touchscreen/goodix.c b/drivers/input/touchscreen/goodix.c
-index 25e575183dd1..b56f29c1afb0 100644
+index 25e575183dd1..d9bb0039697d 100644
 --- a/drivers/input/touchscreen/goodix.c
 +++ b/drivers/input/touchscreen/goodix.c
-@@ -170,7 +170,7 @@ int goodix_i2c_read(struct i2c_client *client, u16 reg, u8 *buf, int len)
- {
- 	struct i2c_msg msgs[2];
- 	__be16 wbuf = cpu_to_be16(reg);
--	int ret;
-+	int ret, retries = 5;
+@@ -368,6 +368,18 @@ static void goodix_ts_report_pen_down(struct goodix_ts_data *ts, u8 *data)
+ 		input_w = get_unaligned_le16(&data[6]);
+ 	}
  
- 	msgs[0].flags = 0;
- 	msgs[0].addr  = client->addr;
-@@ -182,13 +182,16 @@ int goodix_i2c_read(struct i2c_client *client, u16 reg, u8 *buf, int len)
- 	msgs[1].len   = len;
- 	msgs[1].buf   = buf;
- 
--	ret = i2c_transfer(client->adapter, msgs, 2);
--	if (ret >= 0)
--		ret = (ret == ARRAY_SIZE(msgs) ? 0 : -EIO);
-+	while (retries--) {
-+		ret = i2c_transfer(client->adapter, msgs, 2);
-+		if (ret == 2)
-+			return 0;
-+		usleep_range(500, 1000);
-+	}
- 
--	if (ret)
--		dev_err(&client->dev, "Error reading %d bytes from 0x%04x: %d\n",
--			len, reg, ret);
-+	ret = (ret >= 0) ? -EIO : ret;
-+	dev_err_ratelimited(&client->dev, "Error reading %d bytes from 0x%04x: %d\n",
-+			    len, reg, ret);
- 	return ret;
- }
- 
-@@ -204,7 +207,7 @@ int goodix_i2c_write(struct i2c_client *client, u16 reg, const u8 *buf, int len)
- {
- 	u8 *addr_buf;
- 	struct i2c_msg msg;
--	int ret;
-+	int ret, retries = 5;
- 
- 	addr_buf = kmalloc(len + 2, GFP_KERNEL);
- 	if (!addr_buf)
-@@ -219,15 +222,19 @@ int goodix_i2c_write(struct i2c_client *client, u16 reg, const u8 *buf, int len)
- 	msg.buf = addr_buf;
- 	msg.len = len + 2;
- 
--	ret = i2c_transfer(client->adapter, &msg, 1);
--	if (ret >= 0)
--		ret = (ret == 1 ? 0 : -EIO);
-+	while (retries--) {
-+		ret = i2c_transfer(client->adapter, &msg, 1);
-+		if (ret == 1) {
-+			kfree(addr_buf);
-+			return 0;
-+		}
-+		usleep_range(500, 1000);
-+	}
- 
- 	kfree(addr_buf);
--
--	if (ret)
--		dev_err(&client->dev, "Error writing %d bytes to 0x%04x: %d\n",
--			len, reg, ret);
-+	ret = (ret >= 0) ? -EIO : ret;
-+	dev_err_ratelimited(&client->dev, "Error writing %d bytes to 0x%04x: %d\n",
-+			    len, reg, ret);
- 	return ret;
- }
- 
-@@ -497,6 +504,8 @@ static void goodix_process_events(struct goodix_ts_data *ts)
- 	input_sync(ts->input_dev);
- }
- 
-+static int goodix_reset(struct goodix_ts_data *ts);
-+
- /**
-  * goodix_ts_irq_handler - The IRQ handler
-  *
-@@ -506,9 +515,24 @@ static void goodix_process_events(struct goodix_ts_data *ts)
- static irqreturn_t goodix_ts_irq_handler(int irq, void *dev_id)
- {
- 	struct goodix_ts_data *ts = dev_id;
-+	int retry = 5;
-+	int ret = -1;
- 
- 	goodix_process_events(ts);
--	goodix_i2c_write_u8(ts->client, GOODIX_READ_COOR_ADDR, 0);
-+
-+	/* Ensure 0x814E is cleared so GT911 releases INT pin */
-+	while (retry-- && ret < 0) {
-+		ret = goodix_i2c_write_u8(ts->client, GOODIX_READ_COOR_ADDR, 0);
-+		if (ret < 0)
-+			usleep_range(1000, 2000);
++	if (ts->hw_max_x && ts->prop.max_x && (ts->hw_max_x != ts->prop.max_x + 1)) {
++		input_x = (input_x * (ts->prop.max_x + 1)) / ts->hw_max_x;
++		if (input_x > ts->prop.max_x)
++			input_x = ts->prop.max_x;
 +	}
 +
-+	/* If clearing 0x814E failed after all retries, reset controller to break interrupt storm */
-+	if (ret < 0) {
-+		dev_warn_ratelimited(&ts->client->dev,
-+			"Failed to clear 0x814E buffer status, resetting controller\n");
-+		goodix_reset(ts);
++	if (ts->hw_max_y && ts->prop.max_y && (ts->hw_max_y != ts->prop.max_y + 1)) {
++		input_y = (input_y * (ts->prop.max_y + 1)) / ts->hw_max_y;
++		if (input_y > ts->prop.max_y)
++			input_y = ts->prop.max_y;
 +	}
++
+ 	touchscreen_report_pos(ts->input_pen, &ts->prop, input_x, input_y, false);
+ 	input_report_abs(ts->input_pen, ABS_PRESSURE, input_w);
  
- 	return IRQ_HANDLED;
- }
-@@ -771,15 +795,10 @@ int goodix_reset_no_int_sync(struct goodix_ts_data *ts)
- 	usleep_range(6000, 10000);		/* T4: > 5ms */
+@@ -406,6 +418,18 @@ static void goodix_ts_report_touch_8b(struct goodix_ts_data *ts, u8 *coor_data)
+ 	int input_y = get_unaligned_le16(&coor_data[3]);
+ 	int input_w = get_unaligned_le16(&coor_data[5]);
  
- 	/*
--	 * Put the reset pin back in to input / high-impedance mode to save
--	 * power. Only do this in the non ACPI case since some ACPI boards
--	 * don't have a pull-up, so there the reset pin must stay active-high.
-+	 * Keep the reset pin driven active-high instead of floating input
-+	 * to prevent EMI noise from glitching the reset line during touch.
- 	 */
--	if (ts->irq_pin_access_method == IRQ_PIN_ACCESS_GPIO) {
--		error = gpiod_direction_input(ts->gpiod_rst);
--		if (error)
--			goto error;
--	}
-+	gpiod_direction_output(ts->gpiod_rst, 1);
++	if (ts->hw_max_x && ts->prop.max_x && (ts->hw_max_x != ts->prop.max_x + 1)) {
++		input_x = (input_x * (ts->prop.max_x + 1)) / ts->hw_max_x;
++		if (input_x > ts->prop.max_x)
++			input_x = ts->prop.max_x;
++	}
++
++	if (ts->hw_max_y && ts->prop.max_y && (ts->hw_max_y != ts->prop.max_y + 1)) {
++		input_y = (input_y * (ts->prop.max_y + 1)) / ts->hw_max_y;
++		if (input_y > ts->prop.max_y)
++			input_y = ts->prop.max_y;
++	}
++
+ 	input_mt_slot(ts->input_dev, id);
+ 	input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
+ 	touchscreen_report_pos(ts->input_dev, &ts->prop,
+@@ -421,6 +445,18 @@ static void goodix_ts_report_touch_9b(struct goodix_ts_data *ts, u8 *coor_data)
+ 	int input_y = get_unaligned_le16(&coor_data[5]);
+ 	int input_w = get_unaligned_le16(&coor_data[7]);
  
- 	return 0;
++	if (ts->hw_max_x && ts->prop.max_x && (ts->hw_max_x != ts->prop.max_x + 1)) {
++		input_x = (input_x * (ts->prop.max_x + 1)) / ts->hw_max_x;
++		if (input_x > ts->prop.max_x)
++			input_x = ts->prop.max_x;
++	}
++
++	if (ts->hw_max_y && ts->prop.max_y && (ts->hw_max_y != ts->prop.max_y + 1)) {
++		input_y = (input_y * (ts->prop.max_y + 1)) / ts->hw_max_y;
++		if (input_y > ts->prop.max_y)
++			input_y = ts->prop.max_y;
++	}
++
+ 	input_mt_slot(ts->input_dev, id);
+ 	input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
+ 	touchscreen_report_pos(ts->input_dev, &ts->prop,
+@@ -1058,6 +1094,8 @@ static void goodix_read_config(struct goodix_ts_data *ts)
  
-@@ -1382,7 +1401,7 @@ static int goodix_ts_probe(struct i2c_client *client,
- 			snprintf(ts->cfg_name, sizeof(ts->cfg_name),
- 				 "goodix_%s_cfg.bin", ts->id);
+ 	x_max = get_unaligned_le16(&ts->config[RESOLUTION_LOC]);
+ 	y_max = get_unaligned_le16(&ts->config[RESOLUTION_LOC + 2]);
++	ts->hw_max_x = x_max;
++	ts->hw_max_y = y_max;
+ 	if (x_max && y_max) {
+ 		input_abs_set_max(ts->input_dev, ABS_MT_POSITION_X, x_max - 1);
+ 		input_abs_set_max(ts->input_dev, ABS_MT_POSITION_Y, y_max - 1);
+@@ -1196,6 +1234,14 @@ static int goodix_configure_dev(struct goodix_ts_data *ts)
+ 				  ABS_MT_POSITION_Y, ts->prop.max_y);
+ 	}
  
--		error = request_firmware_nowait(THIS_MODULE, true, ts->cfg_name,
-+		error = request_firmware_nowait(THIS_MODULE, false, ts->cfg_name,
- 						&client->dev, GFP_KERNEL, ts,
- 						goodix_config_cb);
- 		if (error) {
++	/* Configure single-touch axes to match full scaled resolution */
++	input_set_abs_params(ts->input_dev, ABS_X, 0, ts->prop.max_x, 0, 0);
++	input_set_abs_params(ts->input_dev, ABS_Y, 0, ts->prop.max_y, 0, 0);
++
++	dev_info(&ts->client->dev,
++		 "Touchscreen scaling: HW res %dx%d -> Reported %dx%d\n",
++		 ts->hw_max_x, ts->hw_max_y, ts->prop.max_x + 1, ts->prop.max_y + 1);
++
+ 	if (dmi_check_system(nine_bytes_report)) {
+ 		ts->contact_size = 9;
+ 
+diff --git a/drivers/input/touchscreen/goodix.h b/drivers/input/touchscreen/goodix.h
+index 87797cc88b32..0051532ca2de 100644
+--- a/drivers/input/touchscreen/goodix.h
++++ b/drivers/input/touchscreen/goodix.h
+@@ -80,6 +80,8 @@ struct goodix_ts_data {
+ 	const struct goodix_chip_data *chip;
+ 	const char *firmware_name;
+ 	struct touchscreen_properties prop;
++	unsigned int hw_max_x;
++	unsigned int hw_max_y;
+ 	unsigned int max_touch_num;
+ 	unsigned int int_trigger_type;
+ 	struct regulator *avdd28;

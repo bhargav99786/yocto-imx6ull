@@ -96,6 +96,8 @@
 		interrupts = <1 IRQ_TYPE_EDGE_FALLING>;
 		reset-gpios = <&gpio5 0 GPIO_ACTIVE_HIGH>;
 		irq-gpios = <&gpio5 1 GPIO_ACTIVE_HIGH>;
+		touchscreen-size-x = <1024>;
+		touchscreen-size-y = <600>;
 		status = "okay";
 	};
 

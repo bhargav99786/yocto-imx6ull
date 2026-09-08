@@ -183,7 +183,7 @@ QWidget *MainWindow::createTouchTestTab()
     makeColorBtn("Yellow", QColor(255, 235, 59));
     makeColorBtn("Green", QColor(76, 175, 80));
     makeColorBtn("Red", QColor(244, 67, 54));
-    makeColorBtn("White", QColor(255, 255, 255));
+    makeColorBtn("White", QColor(240, 244, 248));
 
     vTools->addSpacing(10);
 
