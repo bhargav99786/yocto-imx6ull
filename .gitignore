@@ -16,6 +16,8 @@ touch_draw
 debian-binary
 empty_test.txt
 *.imx
+logo.bmp
+splash.bmp
 
 # Temporary & Editor files
 *.swp

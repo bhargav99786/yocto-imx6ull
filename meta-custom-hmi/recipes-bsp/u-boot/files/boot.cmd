@@ -6,7 +6,7 @@ setenv splashimage 0x89000000
 setenv splashpos m,m
 
 # Load and render U-Boot Splash Logo (1024x600 BMP) within 1 second of power-on
-if load mmc 0:1 ${splashimage} splash.bmp; then
+if load mmc 0:1 ${splashimage} logo.bmp; then
     bmp display ${splashimage}
 fi
 
