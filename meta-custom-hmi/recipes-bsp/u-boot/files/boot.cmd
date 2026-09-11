@@ -2,12 +2,12 @@ echo "=== Loading MarknStamp HMI Linux System ==="
 setenv mmcdev 0
 setenv mmcroot '/dev/mmcblk0p2 rootwait rw'
 setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.global_cursor_default=0 systemd.mask=getty@tty1.service
-setenv splashimage 0x89000000
+setenv splashimage 0x83800000
 setenv splashpos m,m
 
-# Load and render MarknStamp Logo (1024x600 BMP) in U-Boot within 1 second
-if fatload mmc 0:1 0x89000000 logo.bmp; then
-    bmp display 0x89000000
+# Load and render MarknStamp Logo (1024x600 BMP) in U-Boot at 0x83800000
+if fatload mmc 0:1 0x83800000 logo.bmp; then
+    bmp display 0x83800000
 fi
 
 load mmc 0:1 ${loadaddr} zImage

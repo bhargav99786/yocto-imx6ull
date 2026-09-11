@@ -6,19 +6,18 @@ Before=basic.target hmi-app.service
 Conflicts=shutdown.target
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStartPre=/bin/sh -c 'echo -1 > /sys/class/firmware/goodix_911_cfg.bin/loading 2>/dev/null || true'
 ExecStart=/bin/sh -c '\
-    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+    while true; do \
         if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then \
             echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true; \
-            cat /etc/boot_logo.raw > /dev/fb0; \
+            cat /etc/boot_logo.raw > /dev/fb0 2>/dev/null || true; \
             for b in /sys/class/backlight/*; do \
                 [ -d "$b" ] && echo 7 > "$b/brightness" 2>/dev/null && echo 0 > "$b/bl_power" 2>/dev/null || true; \
             done; \
-            break; \
         fi; \
-        sleep 0.1; \
+        sleep 0.5; \
     done'
 RemainAfterExit=yes
 
