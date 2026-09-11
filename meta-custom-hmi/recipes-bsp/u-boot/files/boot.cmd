@@ -1,7 +1,7 @@
 echo "=== Loading MarknStamp HMI Linux System ==="
 setenv mmcdev 0
 setenv mmcroot '/dev/mmcblk0p2 rootwait rw'
-setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.global_cursor_default=0 systemd.mask=getty@tty1.service
+setenv bootargs console=tty1 console=ttymxc0,115200 root=${mmcroot} quiet vt.global_cursor_default=0 systemd.mask=getty@tty1.service
 setenv splashimage 0x89000000
 setenv splashpos m,m
 
