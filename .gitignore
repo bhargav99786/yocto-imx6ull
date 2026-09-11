@@ -15,6 +15,7 @@ touch_draw
 *.tar.xz
 debian-binary
 empty_test.txt
+*.imx
 
 # Temporary & Editor files
 *.swp

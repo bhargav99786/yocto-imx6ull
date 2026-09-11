@@ -2,10 +2,12 @@ echo "=== Loading MarknStamp HMI Linux System ==="
 setenv mmcdev 0
 setenv mmcroot '/dev/mmcblk0p2 rootwait rw'
 setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet
+setenv splashimage 0x89000000
+setenv splashpos m,m
 
 # Load and render U-Boot Splash Logo (1024x600 BMP) within 1 second of power-on
-if load mmc 0:1 0x89000000 splash.bmp; then
-    bmp display 0x89000000
+if load mmc 0:1 ${splashimage} splash.bmp; then
+    bmp display ${splashimage}
 fi
 
 load mmc 0:1 ${loadaddr} zImage
