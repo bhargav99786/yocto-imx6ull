@@ -1,11 +1,20 @@
 # Yocto Build Artifacts & Large Cache Directories
-build-hmi/tmp/
+build-hmi/tmp*/
 build-hmi/downloads/
 build-hmi/sstate-cache/
 build-hmi/cache/
 build-hmi/bitbake-cookerdaemon.log
 build-hmi/*.lock
 build-hmi/*.sock
+
+# Output binaries and temporary archives
+*.dtb
+zImage
+touch_draw
+*.tar.gz
+*.tar.xz
+debian-binary
+empty_test.txt
 
 # Temporary & Editor files
 *.swp
