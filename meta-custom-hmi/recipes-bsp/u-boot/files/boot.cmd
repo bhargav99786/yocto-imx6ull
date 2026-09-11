@@ -5,9 +5,9 @@ setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.globa
 setenv splashimage 0x89000000
 setenv splashpos m,m
 
-# Load and render U-Boot Splash Logo (1024x600 BMP) within 1 second of power-on
-if load mmc 0:1 ${splashimage} logo.bmp; then
-    bmp display ${splashimage}
+# Load and render MarknStamp Logo (1024x600 BMP) in U-Boot within 1 second
+if fatload mmc 0:1 0x89000000 logo.bmp; then
+    bmp display 0x89000000
 fi
 
 load mmc 0:1 ${loadaddr} zImage
