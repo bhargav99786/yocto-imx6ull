@@ -4,7 +4,10 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 
 DEPENDS = "u-boot-mkimage-native"
 
-SRC_URI = "file://boot.cmd"
+SRC_URI = " \
+    file://boot.cmd \
+    file://splash.bmp \
+"
 
 inherit deploy
 
@@ -15,6 +18,7 @@ do_compile() {
 do_deploy() {
     install -d ${DEPLOYDIR}
     install -m 0644 ${B}/boot.scr ${DEPLOYDIR}/boot.scr
+    install -m 0644 ${WORKDIR}/splash.bmp ${DEPLOYDIR}/splash.bmp
 }
 
 addtask do_deploy after do_compile before do_build
