@@ -1,5 +1,7 @@
 #include <QApplication>
 #include <QCursor>
+#include <QStackedWidget>
+#include "loginwindow.h"
 #include "mainwindow.h"
 
 int main(int argc, char *argv[])
@@ -17,10 +19,24 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
 
-    MainWindow w;
-    w.setWindowFlags(Qt::FramelessWindowHint);
-    w.resize(1024, 600);
-    w.showFullScreen();
+    // ── Stacked widget: page 0 = Login, page 1 = HMI Dashboard ──
+    QStackedWidget stack;
+    stack.setWindowFlags(Qt::FramelessWindowHint);
+    stack.resize(1024, 600);
+
+    LoginWindow *login = new LoginWindow(&stack);
+    MainWindow  *hmi   = new MainWindow(&stack);
+
+    stack.addWidget(login);   // index 0
+    stack.addWidget(hmi);     // index 1
+    stack.setCurrentIndex(0); // show login first
+
+    // On successful login: switch to HMI dashboard
+    QObject::connect(login, &LoginWindow::loginSuccess, [&stack]() {
+        stack.setCurrentIndex(1);
+    });
+
+    stack.showFullScreen();
 
     return app.exec();
 }

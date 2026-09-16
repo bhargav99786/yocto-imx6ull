@@ -370,12 +370,18 @@ void MainWindow::onShutdownClicked()
 
 QString MainWindow::getIpAddress()
 {
-    for (const QHostAddress &address : QNetworkInterface::allAddresses()) {
-        if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback()) {
-            return address.toString();
+    QStringList parts;
+    const QList<QNetworkInterface> ifaces = QNetworkInterface::allInterfaces();
+    for (const QNetworkInterface &iface : ifaces) {
+        const QString name = iface.name();
+        if (name != "eth0" && name != "eth1") continue;
+        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+            if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol) {
+                parts << QString("%1:%2").arg(name).arg(entry.ip().toString());
+            }
         }
     }
-    return "Disconnected";
+    return parts.isEmpty() ? "No IP" : parts.join("  |  ");
 }
 
 float MainWindow::getCpuTemperature()

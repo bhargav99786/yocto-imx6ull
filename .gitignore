@@ -25,3 +25,17 @@ splash.bmp
 .DS_Store
 .idea/
 .vscode/
+
+# External Yocto layers and documentation
+poky/
+meta-freescale/
+meta-openembedded/
+meta-qt5/
+meta-swupdate/
+document/
+p17_*.txt
+flash_sd_card.sh
+boot.scr
+hmi-app
+build-hmi/conf/templateconf.cfg
+

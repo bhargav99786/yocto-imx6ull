@@ -1925,10 +1925,10 @@ index 000000000000..5a47a84e9c5d
 +};
 +
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
-index dc90a3ea51ee..605fe3966bdf 100644
+index f9d7cd3be6a8..96b5f1455143 100644
 --- a/drivers/input/touchscreen/Kconfig
 +++ b/drivers/input/touchscreen/Kconfig
-@@ -400,6 +400,19 @@ config TOUCHSCREEN_GOODIX
+@@ -425,6 +425,19 @@ config TOUCHSCREEN_GOODIX
  	  To compile this driver as a module, choose M here: the
  	  module will be called goodix.
  
@@ -1949,23 +1949,23 @@ index dc90a3ea51ee..605fe3966bdf 100644
  	tristate "HiDeep Touch IC"
  	depends on I2C
 diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
-index 557f84fd2075..8f440ea56185 100644
+index 4dd7f23991fd..95ea3883e937 100644
 --- a/drivers/input/touchscreen/Makefile
 +++ b/drivers/input/touchscreen/Makefile
-@@ -46,6 +46,7 @@ obj-$(CONFIG_TOUCHSCREEN_EGALAX_SERIAL)	+= egalax_ts_serial.o
- obj-$(CONFIG_TOUCHSCREEN_EXC3000)	+= exc3000.o
+@@ -49,6 +49,7 @@ obj-$(CONFIG_TOUCHSCREEN_FTS)		+= focaltech_touch/
+ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX)	+= synaptics_dsx/
  obj-$(CONFIG_TOUCHSCREEN_FUJITSU)	+= fujitsu_ts.o
- obj-$(CONFIG_TOUCHSCREEN_GOODIX)	+= goodix_ts.o
+ obj-$(CONFIG_TOUCHSCREEN_GOODIX)	+= goodix.o
 +obj-$(CONFIG_TOUCHSCREEN_GT9xx)		+= gt9xx.o
  obj-$(CONFIG_TOUCHSCREEN_HIDEEP)	+= hideep.o
  obj-$(CONFIG_TOUCHSCREEN_ILI210X)	+= ili210x.o
  obj-$(CONFIG_TOUCHSCREEN_ILITEK)	+= ilitek_ts_i2c.o
 diff --git a/drivers/input/touchscreen/gt9xx.c b/drivers/input/touchscreen/gt9xx.c
 new file mode 100644
-index 000000000000..46b493b288f6
+index 000000000000..f21e08ee4378
 --- /dev/null
 +++ b/drivers/input/touchscreen/gt9xx.c
-@@ -0,0 +1,3124 @@
+@@ -0,0 +1,3129 @@
 +/* 
 + * Goodix GT9xx touchscreen driver
 + * 
@@ -2318,6 +2318,10 @@ index 000000000000..46b493b288f6
 +    {
 +        final_y = ts->abs_y_max - final_y;
 +    }
++    if (final_x < 0) final_x = 0;
++    if (final_x > ts->abs_x_max) final_x = ts->abs_x_max;
++    if (final_y < 0) final_y = 0;
++    if (final_y > ts->abs_y_max) final_y = ts->abs_y_max;
 +
 +#if GTP_ICS_SLOT_REPORT
 +    input_mt_slot(ts->input_dev, id);
@@ -3745,12 +3749,12 @@ index 000000000000..46b493b288f6
 +    __set_bit(INPUT_PROP_DIRECT, ts->input_dev->propbit);
 +    input_set_capability(ts->input_dev, EV_KEY, BTN_TOUCH);
 +
-+    if (ts->swap_x2y)
++    if (ts->abs_x_max == 0) ts->abs_x_max = 1024;
++    if (ts->abs_y_max == 0) ts->abs_y_max = 600;
++    if (ts->swap_x2y && (ts->abs_x_max < ts->abs_y_max))
 +    {
 +        GTP_SWAP(ts->abs_x_max, ts->abs_y_max);
 +    }
-+    if (ts->abs_x_max == 0) ts->abs_x_max = 1024;
-+    if (ts->abs_y_max == 0) ts->abs_y_max = 600;
 +
 +#if GTP_ICS_SLOT_REPORT
 +    input_mt_init_slots(ts->input_dev, 5, INPUT_MT_DIRECT | INPUT_MT_DROP_UNUSED);
@@ -4517,7 +4521,7 @@ index 000000000000..46b493b288f6
 +Output:
 +    Executive outcomes. 0---succeed.
 +*******************************************************/
-+static void goodix_ts_remove(struct i2c_client *client)
++static int goodix_ts_remove(struct i2c_client *client)
 +{
 +    struct goodix_ts_data *ts = i2c_get_clientdata(client);
 +    
@@ -4556,6 +4560,7 @@ index 000000000000..46b493b288f6
 +    i2c_set_clientdata(client, NULL);
 +    input_unregister_device(ts->input_dev);
 +    kfree(ts);
++    return 0;
 +}
 +
 +

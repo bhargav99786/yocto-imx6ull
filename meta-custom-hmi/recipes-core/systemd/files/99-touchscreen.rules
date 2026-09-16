@@ -1,0 +1,3 @@
+# Touchscreen calibration identity matrix — 1:1 direct mapping
+# The gt9xx kernel driver reports correct landscape coordinates: X (0 to 1024) and Y (0 to 600)
+ACTION=="add|change", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0"

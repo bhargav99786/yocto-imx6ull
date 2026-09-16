@@ -14,6 +14,23 @@ do_configure:append() {
     echo "CONFIG_TOUCHSCREEN_GT9xx=y" >> ${B}/.config
     echo "CONFIG_LOGO=y" >> ${B}/.config
     echo "CONFIG_LOGO_LINUX_CLUT224=y" >> ${B}/.config
+    echo "CONFIG_CGROUPS=y" >> ${B}/.config
+    echo "CONFIG_CGROUP_FREEZER=y" >> ${B}/.config
+    echo "CONFIG_CGROUP_PIDS=y" >> ${B}/.config
+    echo "CONFIG_CGROUP_DEVICE=y" >> ${B}/.config
+    echo "CONFIG_CGROUP_CPUACCT=y" >> ${B}/.config
+    echo "CONFIG_CGROUP_SCHED=y" >> ${B}/.config
+    echo "CONFIG_NAMESPACES=y" >> ${B}/.config
+    echo "CONFIG_UTS_NS=y" >> ${B}/.config
+    echo "CONFIG_IPC_NS=y" >> ${B}/.config
+    echo "CONFIG_USER_NS=y" >> ${B}/.config
+    echo "CONFIG_PID_NS=y" >> ${B}/.config
+    echo "CONFIG_NET_NS=y" >> ${B}/.config
+    echo "CONFIG_DEVTMPFS=y" >> ${B}/.config
+    echo "CONFIG_DEVTMPFS_MOUNT=y" >> ${B}/.config
+    echo "CONFIG_SECCOMP=y" >> ${B}/.config
+    echo "CONFIG_TMPFS_POSIX_ACL=y" >> ${B}/.config
 }
+
 
 KERNEL_DEVICETREE += "okmx6ull-c-emmc.dtb imx6ull-custom-hmi.dtb"

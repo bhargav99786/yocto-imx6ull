@@ -1,7 +1,7 @@
 [Unit]
 Description=Fast-Boot Custom Qt 5.15 HMI Desktop Application
 DefaultDependencies=no
-After=systemd-udev-trigger.service systemd-modules-load.service
+After=systemd-udev-trigger.service systemd-modules-load.service boot-splash.service
 Before=multi-user.target
 
 [Service]

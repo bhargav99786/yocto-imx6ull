@@ -19,6 +19,8 @@ do_deploy() {
     install -d ${DEPLOYDIR}
     install -m 0644 ${B}/boot.scr ${DEPLOYDIR}/boot.scr
     install -m 0644 ${WORKDIR}/splash.bmp ${DEPLOYDIR}/splash.bmp
+    install -m 0644 ${WORKDIR}/splash.bmp ${DEPLOYDIR}/logo.bmp
 }
+
 
 addtask do_deploy after do_compile before do_build

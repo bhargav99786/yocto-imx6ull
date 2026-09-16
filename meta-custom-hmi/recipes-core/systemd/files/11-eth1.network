@@ -1,0 +1,16 @@
+# eth1 (ENET2 / fec2) — Auto-IP only (IPv4 Link-Local 169.254.x.x)
+# No DHCP — assigns 169.254.x.x automatically per RFC 3927
+
+[Match]
+Name=eth1
+
+[Network]
+DHCP=yes
+LinkLocalAddressing=ipv4
+MulticastDNS=yes
+LLMNR=yes
+IPv6AcceptRA=no
+
+[DHCPv4]
+RouteMetric=20
+

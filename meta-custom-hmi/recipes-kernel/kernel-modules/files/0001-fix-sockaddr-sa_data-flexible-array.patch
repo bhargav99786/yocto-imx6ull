@@ -1,0 +1,84 @@
+From 84b2382f8618e47d12f10b7a840e53d5faef8969 Mon Sep 17 00:00:00 2001
+From: Bhargav <bhargav@custom.local>
+Date: Tue, 15 Sep 2026 15:30:00 +0530
+Subject: [PATCH] fix sockaddr sa_data flexible array member sizeof error
+
+In modern Linux kernels (5.15.x and newer), struct sockaddr was changed
+to use DECLARE_FLEX_ARRAY(char, sa_data) and char sa_data_min[14].
+Applying sizeof to the flexible array member sa_data causes compilation
+failure:
+"error: invalid application of 'sizeof' to incomplete type 'char[]'"
+
+Fix this by using sizeof(...sa_data_min).
+
+Upstream-Status: Inappropriate [backport / kernel compatibility fix]
+Signed-off-by: Bhargav <bhargav@custom.local>
+---
+ mlinux/moal_eth_ioctl.c | 2 +-
+ mlinux/moal_shim.c      | 2 +-
+ mlinux/moal_uap_wext.c  | 2 +-
+ mlinux/moal_wext.c      | 4 ++--
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/mlinux/moal_eth_ioctl.c b/mlinux/moal_eth_ioctl.c
+index cfba82a..b0c931d 100644
+--- a/mlinux/moal_eth_ioctl.c
++++ b/mlinux/moal_eth_ioctl.c
+@@ -5536,7 +5536,7 @@ static int woal_priv_get_ap(moal_private *priv, t_u8 *respbuf, t_u32 respbuflen)
+ 	if (bss_info.media_connected == MTRUE) {
+ 		moal_memcpy_ext(priv->phandle, mwr->u.ap_addr.sa_data,
+ 				&bss_info.bssid, MLAN_MAC_ADDR_LENGTH,
+-				sizeof(mwr->u.ap_addr.sa_data));
++				sizeof(mwr->u.ap_addr.sa_data_min));
+ 	} else {
+ 		memset(mwr->u.ap_addr.sa_data, 0, MLAN_MAC_ADDR_LENGTH);
+ 	}
+diff --git a/mlinux/moal_shim.c b/mlinux/moal_shim.c
+index f60813f..bdcfa71 100644
+--- a/mlinux/moal_shim.c
++++ b/mlinux/moal_shim.c
+@@ -2406,7 +2406,7 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
+ 			memset(wrqu.ap_addr.sa_data, 0x00, ETH_ALEN);
+ 			moal_memcpy_ext(priv->phandle, wrqu.ap_addr.sa_data,
+ 					pmevent->event_buf, ETH_ALEN,
+-					sizeof(wrqu.ap_addr.sa_data));
++					sizeof(wrqu.ap_addr.sa_data_min));
+ 			wrqu.ap_addr.sa_family = ARPHRD_ETHER;
+ 			wireless_send_event(priv->netdev, SIOCGIWAP, &wrqu,
+ 					    NULL);
+diff --git a/mlinux/moal_uap_wext.c b/mlinux/moal_uap_wext.c
+index 72914f8..6e33507 100644
+--- a/mlinux/moal_uap_wext.c
++++ b/mlinux/moal_uap_wext.c
+@@ -224,7 +224,7 @@ static int woal_get_wap(struct net_device *dev, struct iw_request_info *info,
+ 	if (priv->bss_started)
+ 		moal_memcpy_ext(priv->phandle, awrq->sa_data,
+ 				priv->current_addr, MLAN_MAC_ADDR_LENGTH,
+-				sizeof(awrq->sa_data));
++				sizeof(awrq->sa_data_min));
+ 	else
+ 		memset(awrq->sa_data, 0, MLAN_MAC_ADDR_LENGTH);
+ 	awrq->sa_family = ARPHRD_ETHER;
+diff --git a/mlinux/moal_wext.c b/mlinux/moal_wext.c
+index dbdcc0f..08c2fb9 100644
+--- a/mlinux/moal_wext.c
++++ b/mlinux/moal_wext.c
+@@ -612,7 +612,7 @@ static int woal_get_wap(struct net_device *dev, struct iw_request_info *info,
+ 
+ 	if (bss_info.media_connected == MTRUE)
+ 		moal_memcpy_ext(priv->phandle, awrq->sa_data, &bss_info.bssid,
+-				MLAN_MAC_ADDR_LENGTH, sizeof(awrq->sa_data));
++				MLAN_MAC_ADDR_LENGTH, sizeof(awrq->sa_data_min));
+ 	else
+ 		memset(awrq->sa_data, 0, MLAN_MAC_ADDR_LENGTH);
+ 	awrq->sa_family = ARPHRD_ETHER;
+@@ -2914,7 +2914,7 @@ static int woal_get_scan(struct net_device *dev, struct iw_request_info *info,
+ 		iwe.u.ap_addr.sa_family = ARPHRD_ETHER;
+ 		moal_memcpy_ext(priv->phandle, iwe.u.ap_addr.sa_data,
+ 				&scan_table[i].mac_address, ETH_ALEN,
+-				sizeof(iwe.u.ap_addr.sa_data));
++				sizeof(iwe.u.ap_addr.sa_data_min));
+ 
+ 		iwe.len = IW_EV_ADDR_LEN;
+ 		current_ev = IWE_STREAM_ADD_EVENT(info, current_ev, end_buf,
+-- 

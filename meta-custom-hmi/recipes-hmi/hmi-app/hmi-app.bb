@@ -9,6 +9,8 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 SRC_URI = " \
     file://hmi-app.pro \
     file://main.cpp \
+    file://loginwindow.h \
+    file://loginwindow.cpp \
     file://mainwindow.h \
     file://mainwindow.cpp \
     file://touchcanvas.h \

@@ -1,25 +1,25 @@
 [Unit]
-Description=Instant Power-On Boot Splash (MarknStamp 1024x600)
+Description=MarknStamp Boot Loading Screen (1024x600)
 DefaultDependencies=no
 After=systemd-udev-trigger.service
-Before=basic.target hmi-app.service
+Before=hmi-app.service basic.target
 Conflicts=shutdown.target
 
 [Service]
-Type=simple
-ExecStartPre=/bin/sh -c 'echo -1 > /sys/class/firmware/goodix_911_cfg.bin/loading 2>/dev/null || true'
+Type=oneshot
+RemainAfterExit=yes
+# Write the loading screen once to framebuffer, then exit immediately
 ExecStart=/bin/sh -c '\
-    while true; do \
+    for i in 1 2 3 4 5; do \
         if [ -c /dev/fb0 ] && [ -f /etc/boot_logo.raw ]; then \
             echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true; \
-            cat /etc/boot_logo.raw > /dev/fb0 2>/dev/null || true; \
-            for b in /sys/class/backlight/*; do \
-                [ -d "$b" ] && echo 7 > "$b/brightness" 2>/dev/null && echo 0 > "$b/bl_power" 2>/dev/null || true; \
-            done; \
+            cat /etc/boot_logo.raw > /dev/fb0 2>/dev/null && break; \
         fi; \
-        sleep 0.5; \
+        sleep 0.2; \
+    done; \
+    for b in /sys/class/backlight/*; do \
+        [ -d "$b" ] && echo 7 > "$b/brightness" 2>/dev/null && echo 0 > "$b/bl_power" 2>/dev/null || true; \
     done'
-RemainAfterExit=yes
 
 [Install]
 WantedBy=basic.target

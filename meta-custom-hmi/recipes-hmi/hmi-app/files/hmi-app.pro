@@ -7,10 +7,12 @@ TEMPLATE = app
 
 SOURCES += \
     main.cpp \
+    loginwindow.cpp \
     mainwindow.cpp \
     touchcanvas.cpp
 
 HEADERS += \
+    loginwindow.h \
     mainwindow.h \
     touchcanvas.h
 

@@ -1,0 +1,29 @@
+From 7bf943c15aa7d4cd94df0ccb72c678e35c90c82a Mon Sep 17 00:00:00 2001
+From: MarknStamp HMI <hmi@marknstamp.com>
+Date: Sat, 12 Sep 2026 09:33:52 +0530
+Subject: [PATCH] mx6ullevk: define MXS_LCDIF_BASE for CONFIG_VIDEO_MXS support
+
+The mxsfb.c driver uses MXS_LCDIF_BASE but mx6ullevk.h never
+defined it (unlike mx6ul_14x14_evk.h, colibri-imx6ull.h etc.).
+Add the same define as used by other iMX6UL/ULL boards.
+
+Signed-off-by: MarknStamp HMI <hmi@marknstamp.com>
+---
+ include/configs/mx6ullevk.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/include/configs/mx6ullevk.h b/include/configs/mx6ullevk.h
+index 00cc547b90..e81fbb2bc8 100644
+--- a/include/configs/mx6ullevk.h
++++ b/include/configs/mx6ullevk.h
+@@ -114,4 +114,7 @@
+ #define CONFIG_FEC_ENET_DEV		1
+ #endif
+ 
++/* LCDIF base address required by mxsfb.c driver (CONFIG_VIDEO_MXS) */
++#define MXS_LCDIF_BASE MX6ULL_LCDIF1_BASE_ADDR
++
+ #endif
+-- 
+2.34.1
+
