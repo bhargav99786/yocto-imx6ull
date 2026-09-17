@@ -11,10 +11,10 @@ int main(int argc, char *argv[])
         qputenv("QT_QPA_PLATFORM", "linuxfb:fb=/dev/fb0");
     }
     if (!qEnvironmentVariableIsSet("QT_QPA_GENERIC_PLUGINS")) {
-        qputenv("QT_QPA_GENERIC_PLUGINS", "evdevtouch:/dev/input/touchscreen0");
+        qputenv("QT_QPA_GENERIC_PLUGINS", "tslib:/dev/input/touchscreen0");
     }
-    if (!qEnvironmentVariableIsSet("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS")) {
-        qputenv("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS", "/dev/input/touchscreen0");
+    if (!qEnvironmentVariableIsSet("QT_QPA_FONTDIR")) {
+        qputenv("QT_QPA_FONTDIR", "/usr/share/fonts/ttf");
     }
 
     QApplication app(argc, argv);

@@ -11,6 +11,23 @@ fi
 APP_EXEC="${APP_EXEC:-/opt/hmi/bin/app}"
 APP_PLATFORM="${APP_PLATFORM:-linuxfb:fb=/dev/fb0}"
 
+# Ensure font directories and symlinks are set up for Qt
+export QT_QPA_FONTDIR="${QT_QPA_FONTDIR:-/usr/share/fonts/ttf}"
+if [ ! -d /usr/lib/fonts ]; then
+    if [ -d /usr/share/fonts/ttf ]; then
+        mkdir -p /usr/lib
+        ln -sf /usr/share/fonts/ttf /usr/lib/fonts
+    elif [ -d /usr/share/fonts/truetype ]; then
+        mkdir -p /usr/lib
+        ln -sf /usr/share/fonts/truetype /usr/lib/fonts
+    fi
+fi
+
+# Ensure pointercal exists for tslib
+if [ ! -f /etc/pointercal ]; then
+    echo "0 -111848 67108864 -38400 0 39321600 65536" > /etc/pointercal
+fi
+
 # If configured binary does not exist or is not executable, fall back to default demo
 if [ ! -x "$APP_EXEC" ]; then
     echo "[hmi-session-launcher] Warning: $APP_EXEC not found or not executable. Falling back to /usr/bin/hmi-app" >&2
