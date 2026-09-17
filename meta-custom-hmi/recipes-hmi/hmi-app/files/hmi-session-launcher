@@ -11,16 +11,24 @@ fi
 APP_EXEC="${APP_EXEC:-/opt/hmi/bin/app}"
 APP_PLATFORM="${APP_PLATFORM:-linuxfb:fb=/dev/fb0}"
 
+# Wait up to 5 seconds for touchscreen input device to appear
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -e /dev/input/touchscreen0 ] || [ -e /dev/input/event0 ]; then
+        break
+    fi
+    sleep 0.5
+done
+
 # If configured binary does not exist or is not executable, fall back to default demo
 if [ ! -x "$APP_EXEC" ]; then
     echo "[hmi-session-launcher] Warning: $APP_EXEC not found or not executable. Falling back to /usr/bin/hmi-app" >&2
     APP_EXEC="/usr/bin/hmi-app"
 fi
 
-# Export Qt Platform & Generic Plugin configurations (with rotate=90 for 1024x600 display)
+# Export Qt Platform & Generic Plugin configurations (with rotate=90:invertx for 1024x600 display)
 export QT_QPA_PLATFORM="$APP_PLATFORM"
-export QT_QPA_GENERIC_PLUGINS="${QT_QPA_GENERIC_PLUGINS:-evdevtouch:/dev/input/touchscreen0:rotate=90}"
-export QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS="${QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS:-/dev/input/touchscreen0:rotate=90}"
+export QT_QPA_GENERIC_PLUGINS="${QT_QPA_GENERIC_PLUGINS:-evdevtouch:/dev/input/touchscreen0:rotate=90:invertx}"
+export QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS="${QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS:-/dev/input/touchscreen0:rotate=90:invertx}"
 export QT_QPA_FB_NO_LIBINPUT=1
 
 # Ensure font directories are accessible to Qt QBasicFontDatabase

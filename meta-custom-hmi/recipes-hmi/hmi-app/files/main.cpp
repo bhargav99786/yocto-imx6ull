@@ -15,12 +15,12 @@ int main(int argc, char *argv[])
         qputenv("QT_QPA_PLATFORM", "linuxfb:fb=/dev/fb0");
     }
 
-    // 2. Configure evdevtouch with rotate=90 for 1024x600 Goodix digitizer
+    // 2. Configure evdevtouch with rotate=90:invertx for 1024x600 Goodix digitizer
     if (!qEnvironmentVariableIsSet("QT_QPA_GENERIC_PLUGINS")) {
-        qputenv("QT_QPA_GENERIC_PLUGINS", "evdevtouch:/dev/input/touchscreen0:rotate=90");
+        qputenv("QT_QPA_GENERIC_PLUGINS", "evdevtouch:/dev/input/touchscreen0:rotate=90:invertx");
     }
     if (!qEnvironmentVariableIsSet("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS")) {
-        qputenv("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS", "/dev/input/touchscreen0:rotate=90");
+        qputenv("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS", "/dev/input/touchscreen0:rotate=90:invertx");
     }
 
     // 3. Configure font directory for Qt QBasicFontDatabase
