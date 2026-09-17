@@ -5,6 +5,13 @@ setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.globa
 setenv splashimage 0x83800000
 setenv splashpos m,m
 
+# Load user-replaceable BMP splash image from FAT boot partition (mmc 0:1)
+if load mmc 0:1 ${splashimage} splash.bmp; then
+    bmp display ${splashimage}
+elif load mmc 0:1 ${splashimage} logo.bmp; then
+    bmp display ${splashimage}
+fi
+
 load mmc 0:1 ${loadaddr} zImage
 
 if load mmc 0:1 ${fdt_addr} okmx6ull-c-emmc.dtb; then

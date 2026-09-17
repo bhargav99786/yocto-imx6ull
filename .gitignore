@@ -36,6 +36,6 @@ document/
 p17_*.txt
 flash_sd_card.sh
 boot.scr
-hmi-app
+/hmi-app
 build-hmi/conf/templateconf.cfg
 
