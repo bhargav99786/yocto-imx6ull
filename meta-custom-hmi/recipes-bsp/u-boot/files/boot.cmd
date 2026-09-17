@@ -13,6 +13,15 @@ fi
 
 # Suppress console flicker, disable kernel PPM logo (logo.nologo), hide VT cursor, isolate fbcon
 setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.global_cursor_default=0 logo.nologo fbcon=map:9 systemd.mask=getty@tty1.service
+setenv splashimage 0x83800000
+setenv splashpos m,m
+
+# Load user-replaceable BMP splash screen from FAT boot partition
+if load mmc ${mmcdev}:1 ${splashimage} splash.bmp; then
+    bmp display ${splashimage}
+elif load mmc ${mmcdev}:1 ${splashimage} logo.bmp; then
+    bmp display ${splashimage}
+fi
 
 load mmc ${mmcdev}:1 ${loadaddr} zImage
 
