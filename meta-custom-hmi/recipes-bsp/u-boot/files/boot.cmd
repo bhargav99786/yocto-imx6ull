@@ -1,23 +1,33 @@
 echo "=== Loading MarknStamp HMI Linux System ==="
-setenv mmcdev 0
-setenv mmcroot '/dev/mmcblk0p2 rootwait rw'
+
+# Determine boot device (SD card mmc 0 vs eMMC mmc 1)
+if test -z "${mmcdev}"; then
+    setenv mmcdev 0
+fi
+
+if test "${mmcdev}" = "1"; then
+    setenv mmcroot '/dev/mmcblk1p2 rootwait rw'
+else
+    setenv mmcroot '/dev/mmcblk0p2 rootwait rw'
+fi
+
 setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.global_cursor_default=0 systemd.mask=getty@tty1.service
 setenv splashimage 0x83800000
 setenv splashpos m,m
 
-# Load user-replaceable BMP splash image from FAT boot partition (mmc 0:1)
-if load mmc 0:1 ${splashimage} splash.bmp; then
+# Load user-replaceable BMP splash image from FAT boot partition
+if load mmc ${mmcdev}:1 ${splashimage} splash.bmp; then
     bmp display ${splashimage}
-elif load mmc 0:1 ${splashimage} logo.bmp; then
+elif load mmc ${mmcdev}:1 ${splashimage} logo.bmp; then
     bmp display ${splashimage}
 fi
 
-load mmc 0:1 ${loadaddr} zImage
+load mmc ${mmcdev}:1 ${loadaddr} zImage
 
-if load mmc 0:1 ${fdt_addr} okmx6ull-c-emmc.dtb; then
+if load mmc ${mmcdev}:1 ${fdt_addr} okmx6ull-c-emmc.dtb; then
     bootz ${loadaddr} - ${fdt_addr}
-elif load mmc 0:1 ${fdt_addr} imx6ull-14x14-evk.dtb; then
+elif load mmc ${mmcdev}:1 ${fdt_addr} imx6ull-14x14-evk.dtb; then
     bootz ${loadaddr} - ${fdt_addr}
-elif load mmc 0:1 ${fdt_addr} imx6ull-custom-hmi.dtb; then
+elif load mmc ${mmcdev}:1 ${fdt_addr} imx6ull-custom-hmi.dtb; then
     bootz ${loadaddr} - ${fdt_addr}
 fi
