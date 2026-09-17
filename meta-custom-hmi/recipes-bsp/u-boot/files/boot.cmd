@@ -11,17 +11,8 @@ else
     setenv mmcroot '/dev/mmcblk0p2 rootwait rw'
 fi
 
-# Suppress console flicker, disable kernel PPM logo (logo.nologo), hide VT cursor
-setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.global_cursor_default=0 logo.nologo systemd.mask=getty@tty1.service
-setenv splashimage 0x83800000
-setenv splashpos m,m
-
-# Only load splash.bmp if logo was not already rendered by U-Boot video init
-if test -z "${videodone}"; then
-    if load mmc ${mmcdev}:1 ${splashimage} splash.bmp; then
-        bmp display ${splashimage}
-    fi
-fi
+# Suppress console flicker, disable kernel PPM logo (logo.nologo), hide VT cursor, isolate fbcon
+setenv bootargs console=ttymxc0,115200 root=${mmcroot} quiet loglevel=0 vt.global_cursor_default=0 logo.nologo fbcon=map:9 systemd.mask=getty@tty1.service
 
 load mmc ${mmcdev}:1 ${loadaddr} zImage
 
