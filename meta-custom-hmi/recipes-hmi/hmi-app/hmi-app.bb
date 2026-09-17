@@ -3,7 +3,6 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
 DEPENDS += "qtbase"
-RDEPENDS:${PN} += "tslib tslib-calibrate"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
@@ -21,7 +20,6 @@ SRC_URI = " \
     file://99-goodix.rules \
     file://hmi-session.conf \
     file://hmi-session-launcher \
-    file://pointercal \
 "
 
 S = "${WORKDIR}"
@@ -46,23 +44,25 @@ do_install:append() {
 
     install -d ${D}${sysconfdir}
     install -m 0644 ${WORKDIR}/hmi-session.conf ${D}${sysconfdir}/hmi-session.conf
-    install -m 0644 ${WORKDIR}/pointercal ${D}${sysconfdir}/pointercal
 
     install -d ${D}${bindir}
     install -m 0755 ${WORKDIR}/hmi-session-launcher ${D}${bindir}/hmi-session-launcher
 
     install -d ${D}/opt/hmi/bin
     ln -sf /usr/bin/hmi-app ${D}/opt/hmi/bin/app
+
+    install -d ${D}/usr/lib
+    ln -sf /usr/share/fonts/truetype ${D}/usr/lib/fonts
 }
 
 FILES:${PN} += " \
     ${bindir}/hmi-app \
     ${bindir}/hmi-session-launcher \
     ${sysconfdir}/hmi-session.conf \
-    ${sysconfdir}/pointercal \
     ${sysconfdir}/init.d/hmi-app \
     ${systemd_system_unitdir}/hmi-app.service \
     ${sysconfdir}/udev/rules.d/99-goodix.rules \
+    /usr/lib/fonts \
     /opt/hmi \
     /opt/hmi/bin \
     /opt/hmi/bin/app \

@@ -11,35 +11,34 @@ fi
 APP_EXEC="${APP_EXEC:-/opt/hmi/bin/app}"
 APP_PLATFORM="${APP_PLATFORM:-linuxfb:fb=/dev/fb0}"
 
-# Ensure font directories and symlinks are set up for Qt
-export QT_QPA_FONTDIR="${QT_QPA_FONTDIR:-/usr/share/fonts/ttf}"
-if [ ! -d /usr/lib/fonts ]; then
-    if [ -d /usr/share/fonts/ttf ]; then
-        mkdir -p /usr/lib
-        ln -sf /usr/share/fonts/ttf /usr/lib/fonts
-    elif [ -d /usr/share/fonts/truetype ]; then
-        mkdir -p /usr/lib
-        ln -sf /usr/share/fonts/truetype /usr/lib/fonts
-    fi
-fi
-
-# Ensure pointercal exists for tslib
-if [ ! -f /etc/pointercal ]; then
-    echo "0 -111848 67108864 -38400 0 39321600 65536" > /etc/pointercal
-fi
-
 # If configured binary does not exist or is not executable, fall back to default demo
 if [ ! -x "$APP_EXEC" ]; then
     echo "[hmi-session-launcher] Warning: $APP_EXEC not found or not executable. Falling back to /usr/bin/hmi-app" >&2
     APP_EXEC="/usr/bin/hmi-app"
 fi
 
-# Export Qt Platform & Generic Plugin configurations
+# Export Qt Platform & Generic Plugin configurations (with rotate=90 for 1024x600 display)
 export QT_QPA_PLATFORM="$APP_PLATFORM"
+export QT_QPA_GENERIC_PLUGINS="${QT_QPA_GENERIC_PLUGINS:-evdevtouch:/dev/input/touchscreen0:rotate=90}"
+export QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS="${QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS:-/dev/input/touchscreen0:rotate=90}"
+export QT_QPA_FB_NO_LIBINPUT=1
+
+# Ensure font directories are accessible to Qt QBasicFontDatabase
+if [ -d "/usr/share/fonts/truetype/dejavu" ]; then
+    export QT_QPA_FONTDIR="/usr/share/fonts/truetype/dejavu"
+elif [ -d "/usr/share/fonts/truetype" ]; then
+    export QT_QPA_FONTDIR="/usr/share/fonts/truetype"
+fi
+
+# Ensure /usr/lib/fonts symlink exists for legacy Qt font lookups
+if [ ! -e "/usr/lib/fonts" ]; then
+    mkdir -p /usr/lib
+    ln -sf /usr/share/fonts/truetype /usr/lib/fonts 2>/dev/null || true
+fi
+
 if [ -n "$APP_EXTRA_ENV" ]; then
     export $APP_EXTRA_ENV
 fi
-export QT_QPA_FB_NO_LIBINPUT=1
 
 # Ensure framebuffer is unblanked and backlight is turned on
 echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true
