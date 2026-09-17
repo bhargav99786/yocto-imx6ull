@@ -7,6 +7,7 @@ DEPENDS = "u-boot-mkimage-native"
 SRC_URI = " \
     file://boot.cmd \
     file://splash.bmp \
+    file://splash_raw.bin \
 "
 
 inherit deploy
@@ -20,6 +21,7 @@ do_deploy() {
     install -m 0644 ${B}/boot.scr ${DEPLOYDIR}/boot.scr
     install -m 0644 ${WORKDIR}/splash.bmp ${DEPLOYDIR}/splash.bmp
     install -m 0644 ${WORKDIR}/splash.bmp ${DEPLOYDIR}/logo.bmp
+    install -m 0644 ${WORKDIR}/splash_raw.bin ${DEPLOYDIR}/splash_raw.bin
 }
 
 

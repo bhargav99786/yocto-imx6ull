@@ -51,20 +51,65 @@ if [ -z "$EMMC_DEV" ]; then
 fi
 
 echo "Source device: $CURRENT_ROOT_PART. Target eMMC device: $EMMC_DEV."
+echo "eMMC total sectors: $MAX_SIZE"
 
-# 2. Partition eMMC into Dual-Bank A/B Layout (128MB Boot, 2.4GB Bank A, 2.4GB Bank B, 2.3GB Data)
-echo "--> [1/5] Partitioning $EMMC_DEV into Dual-Bank A/B layout..."
+# Safety check: eMMC must be > 1GB (>2000000 sectors of 512B)
+if [ "$MAX_SIZE" -lt 2000000 ]; then
+    echo "[ERROR] Target device $EMMC_DEV is only ${MAX_SIZE} sectors — too small to be the eMMC!"
+    echo "[ERROR] Expected at least 8GB device. Aborting to prevent data corruption."
+    exit 1
+fi
+
+# 2. WIPE eMMC partition table first to ensure clean state
+echo "--> [1/5] Wiping $EMMC_DEV partition table..."
 umount ${EMMC_DEV}p* 2>/dev/null || true
+dd if=/dev/zero of=$EMMC_DEV bs=512 count=4096 conv=fsync status=none 2>/dev/null || true
+sync
+sleep 1
 
-sfdisk $EMMC_DEV << 'EOF_SFDISK'
-2048,256000,c,*
-258048,5120000,L
-5378048,5120000,L
-10498048,,L
+# Compute dynamic layout from actual disk size
+# Layout: 128MB boot | ~38% Bank A | ~38% Bank B | rest Data
+# All values in 512-byte sectors
+TOTAL_SECTORS=$MAX_SIZE
+
+# Boot partition: 128MB = 262144 sectors, aligned to 2048
+BOOT_START=2048
+BOOT_SIZE=262144
+BOOT_END=$((BOOT_START + BOOT_SIZE - 1))
+
+# Bank A & B: each ~38% of remaining space, aligned to 2048
+REMAIN=$((TOTAL_SECTORS - BOOT_START - BOOT_SIZE - 4096))  # reserve 4096 at end
+BANK_SIZE=$(( (REMAIN / 3) & ~2047 ))   # divisible by 2048, 1/3 each for A and B
+
+BANKA_START=$((BOOT_START + BOOT_SIZE))
+BANKA_END=$((BANKA_START + BANK_SIZE - 1))
+
+BANKB_START=$((BANKA_START + BANK_SIZE))
+BANKB_END=$((BANKB_START + BANK_SIZE - 1))
+
+DATA_START=$((BANKB_START + BANK_SIZE))
+# DATA ends at disk end (leave blank for sfdisk to auto-fill)
+
+echo "Layout (sectors):"
+echo "  Boot  : $BOOT_START - $BOOT_END  (128MB)"
+echo "  BankA : $BANKA_START - $BANKA_END  ($(( BANK_SIZE / 2048 ))MB)"
+echo "  BankB : $BANKB_START - $BANKB_END  ($(( BANK_SIZE / 2048 ))MB)"
+echo "  Data  : $DATA_START - end"
+
+# Partition eMMC with calculated sizes
+sfdisk $EMMC_DEV << EOF_SFDISK
+${BOOT_START},${BOOT_SIZE},c,*
+${BANKA_START},${BANK_SIZE},L
+${BANKB_START},${BANK_SIZE},L
+${DATA_START},,L
 EOF_SFDISK
 
 sync
-partprobe $EMMC_DEV 2>/dev/null || udevadm settle 2>/dev/null || sleep 2
+partprobe $EMMC_DEV 2>/dev/null || udevadm settle 2>/dev/null || sleep 3
+
+# Re-read partition table
+blockdev --rereadpt $EMMC_DEV 2>/dev/null || true
+sleep 1
 
 # 3. Format & Copy Boot Partition
 SD_BOOT_PART="${CURRENT_ROOT_DISK}p1"
@@ -74,7 +119,8 @@ EMMC_ROOTB_PART="${EMMC_DEV}p3"
 EMMC_DATA_PART="${EMMC_DEV}p4"
 
 echo "--> [2/5] Copying Boot partition ($SD_BOOT_PART -> $EMMC_BOOT_PART)..."
-dd if=$SD_BOOT_PART of=$EMMC_BOOT_PART bs=1M status=none conv=fsync
+dd if=$SD_BOOT_PART of=$EMMC_BOOT_PART bs=1M status=progress conv=fsync
+sync
 
 echo "--> [3/5] Formatting RootFS & Data Partitions..."
 mkfs.ext4 -F -L "rootfs_a" $EMMC_ROOTA_PART
@@ -100,7 +146,9 @@ tar --exclude='./dev' \
     -cf - . | (cd /mnt/emmc_root && tar xpf -)
 
 # Create missing mountpoint directories on eMMC rootfs_a
-mkdir -p /mnt/emmc_root/dev /mnt/emmc_root/proc /mnt/emmc_root/sys /mnt/emmc_root/tmp /mnt/emmc_root/run /mnt/emmc_root/mnt /mnt/emmc_root/media /mnt/emmc_root/data
+mkdir -p /mnt/emmc_root/dev /mnt/emmc_root/proc /mnt/emmc_root/sys \
+         /mnt/emmc_root/tmp /mnt/emmc_root/run /mnt/emmc_root/mnt \
+         /mnt/emmc_root/media /mnt/emmc_root/data
 chmod 1777 /mnt/emmc_root/tmp
 
 # CRITICAL: Remove first-boot auto-flash flag from cloned eMMC rootfs
@@ -116,15 +164,17 @@ mount $SD_BOOT_PART /mnt/sd_boot 2>/dev/null || true
 
 EMMC_NAME=$(basename $EMMC_DEV)
 if [ -f /mnt/sd_boot/u-boot.imx ]; then
+    echo "  Flashing u-boot.imx to eMMC boot0 hardware partition..."
     echo 0 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
     dd if=/mnt/sd_boot/u-boot.imx of=/dev/${EMMC_NAME}boot0 bs=1K seek=1 conv=fsync status=none 2>/dev/null || true
     echo 1 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
+    echo "  Flashing u-boot.imx to eMMC raw (offset 1KB)..."
     dd if=/mnt/sd_boot/u-boot.imx of=$EMMC_DEV bs=1K seek=1 conv=fsync status=none
 fi
 
 umount /mnt/sd_boot 2>/dev/null || true
 
-# Initialize U-Boot environment variables for A/B booting if fw_setenv is available
+# Initialize U-Boot environment variables for A/B booting
 if [ -x /usr/bin/fw_setenv ]; then
     fw_setenv active_rootfs rootfs_a || true
     fw_setenv mmcpart 1 || true
@@ -140,9 +190,10 @@ sync
 echo ""
 echo "======================================================="
 echo " eMMC DUAL-BANK A/B FLASH COMPLETED SUCCESSFULLY!"
-echo " Bank A: $EMMC_ROOTA_PART (Active)"
-echo " Bank B: $EMMC_ROOTB_PART (OTA Target)"
-echo " Data:   $EMMC_DATA_PART (Persistent)"
+echo " Boot  : $EMMC_BOOT_PART (128MB FAT)"
+echo " Bank A: $EMMC_ROOTA_PART (Active, $(( BANK_SIZE / 2048 ))MB)"
+echo " Bank B: $EMMC_ROOTB_PART (OTA Target, $(( BANK_SIZE / 2048 ))MB)"
+echo " Data  : $EMMC_DATA_PART (Persistent)"
 echo "======================================================="
 echo "To boot from eMMC:"
 echo " 1. Power off board"

@@ -1,15 +1,15 @@
 [Unit]
 Description=Kernel Startup Loading Screen (1024x600)
 DefaultDependencies=no
-After=systemd-udev-trigger.service
-Before=hmi-app.service basic.target
+After=systemd-modules-load.service local-fs.target
+Before=sysinit.target basic.target hmi-app.service
 Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/sh -c '\
-    for i in 1 2 3 4 5; do \
+    for i in 1 2 3 4 5 6 7 8 9 10; do \
         if [ -c /dev/fb0 ]; then \
             echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true; \
             if [ -x /usr/bin/fbshow ] && [ -f /etc/loading.bmp ]; then \
@@ -18,11 +18,11 @@ ExecStart=/bin/sh -c '\
                 cat /etc/loading_32bpp.raw > /dev/fb0 2>/dev/null && break; \
             fi; \
         fi; \
-        sleep 0.1; \
+        sleep 0.05; \
     done; \
     for b in /sys/class/backlight/*; do \
         [ -d "$b" ] && echo 7 > "$b/brightness" 2>/dev/null && echo 0 > "$b/bl_power" 2>/dev/null || true; \
     done'
 
 [Install]
-WantedBy=basic.target
+WantedBy=sysinit.target
