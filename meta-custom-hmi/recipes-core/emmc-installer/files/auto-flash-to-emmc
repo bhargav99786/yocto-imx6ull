@@ -6,28 +6,54 @@
 
 set -e
 
-EMMC_DEV="/dev/mmcblk1"
 FLAG_FILE="/etc/auto-flash-emmc"
 
 echo "======================================================="
 echo " Starting MarknStamp eMMC Flashing Process (A/B Scheme)"
 echo "======================================================="
 
-# 1. Safety Check: Only proceed if booted from SD card
-CURRENT_ROOT=$(findmnt -n -o SOURCE / 2>/dev/null || mount | grep " / " | cut -d' ' -f1)
-if echo "$CURRENT_ROOT" | grep -q "mmcblk1"; then
-    echo "[emmc-installer] Notice: Booted from eMMC ($CURRENT_ROOT). Auto-installer disabled."
+# 1. Detect current root device and target eMMC device (>1GB disk that is not current root disk)
+CURRENT_ROOT_PART=$(findmnt -n -o SOURCE / 2>/dev/null || mount | grep " / " | cut -d' ' -f1)
+CURRENT_ROOT_DISK=$(echo "$CURRENT_ROOT_PART" | sed -E 's/p[0-9]+$//')
+
+if echo "$CURRENT_ROOT_PART" | grep -q "mmcblk1p" || echo "$CURRENT_ROOT_PART" | grep -q "mmcblk2p"; then
+    echo "[emmc-installer] Notice: Booted from eMMC ($CURRENT_ROOT_PART). Auto-installer disabled."
     rm -f "$FLAG_FILE" 2>/dev/null || true
     exit 0
 fi
 
-echo "Source device: $CURRENT_ROOT. Target device: $EMMC_DEV."
+# Find main eMMC disk (>1GB = >2000000 512-byte sectors)
+EMMC_DEV=""
+for dev in /sys/block/mmcblk*; do
+    DEVNAME=$(basename $dev)
+    if echo "$DEVNAME" | grep -q "boot" || echo "$DEVNAME" | grep -q "rpmb"; then
+        continue
+    fi
+    if [ "/dev/$DEVNAME" = "$CURRENT_ROOT_DISK" ]; then
+        continue
+    fi
+    SIZE=$(cat $dev/size 2>/dev/null || echo 0)
+    if [ "$SIZE" -gt 2000000 ]; then
+        EMMC_DEV="/dev/$DEVNAME"
+        break
+    fi
+done
+
+if [ -z "$EMMC_DEV" ]; then
+    if [ "$CURRENT_ROOT_DISK" = "/dev/mmcblk0" ]; then
+        EMMC_DEV="/dev/mmcblk1"
+    else
+        EMMC_DEV="/dev/mmcblk0"
+    fi
+fi
+
+echo "Source device: $CURRENT_ROOT_PART. Target eMMC device: $EMMC_DEV."
 
 # 2. Partition eMMC into Dual-Bank A/B Layout (128MB Boot, 2.4GB Bank A, 2.4GB Bank B, 2.3GB Data)
 echo "--> [1/5] Partitioning $EMMC_DEV into Dual-Bank A/B layout..."
-umount /dev/mmcblk1p* 2>/dev/null || true
+umount ${EMMC_DEV}p* 2>/dev/null || true
 
-sfdisk /dev/mmcblk1 << 'EOF_SFDISK'
+sfdisk $EMMC_DEV << 'EOF_SFDISK'
 2048,256000,c,*
 258048,5120000,L
 5378048,5120000,L
@@ -35,22 +61,28 @@ sfdisk /dev/mmcblk1 << 'EOF_SFDISK'
 EOF_SFDISK
 
 sync
-partprobe /dev/mmcblk1 2>/dev/null || udevadm settle 2>/dev/null || sleep 2
+partprobe $EMMC_DEV 2>/dev/null || udevadm settle 2>/dev/null || sleep 2
 
 # 3. Format & Copy Boot Partition
-echo "--> [2/5] Copying Boot partition (/dev/mmcblk0p1 -> /dev/mmcblk1p1)..."
-dd if=/dev/mmcblk0p1 of=/dev/mmcblk1p1 bs=1M status=none conv=fsync
+SD_BOOT_PART="${CURRENT_ROOT_DISK}p1"
+EMMC_BOOT_PART="${EMMC_DEV}p1"
+EMMC_ROOTA_PART="${EMMC_DEV}p2"
+EMMC_ROOTB_PART="${EMMC_DEV}p3"
+EMMC_DATA_PART="${EMMC_DEV}p4"
+
+echo "--> [2/5] Copying Boot partition ($SD_BOOT_PART -> $EMMC_BOOT_PART)..."
+dd if=$SD_BOOT_PART of=$EMMC_BOOT_PART bs=1M status=none conv=fsync
 
 echo "--> [3/5] Formatting RootFS & Data Partitions..."
-mkfs.ext4 -F -L "rootfs_a" /dev/mmcblk1p2
-mkfs.ext4 -F -L "rootfs_b" /dev/mmcblk1p3
-mkfs.ext4 -F -L "data" /dev/mmcblk1p4
+mkfs.ext4 -F -L "rootfs_a" $EMMC_ROOTA_PART
+mkfs.ext4 -F -L "rootfs_b" $EMMC_ROOTB_PART
+mkfs.ext4 -F -L "data" $EMMC_DATA_PART
 sync
 
-# 4. Clone Root Filesystem to rootfs_a (/dev/mmcblk1p2)
-echo "--> [4/5] Cloning RootFS to Bank A (/dev/mmcblk1p2)..."
+# 4. Clone Root Filesystem to rootfs_a (Bank A)
+echo "--> [4/5] Cloning RootFS to Bank A ($EMMC_ROOTA_PART)..."
 mkdir -p /mnt/emmc_root
-mount /dev/mmcblk1p2 /mnt/emmc_root
+mount $EMMC_ROOTA_PART /mnt/emmc_root
 
 cd /
 tar --exclude='./dev' \
@@ -77,13 +109,14 @@ umount /mnt/emmc_root
 # 5. Flash U-Boot and Initialize Active Bank
 echo "--> [5/5] Flashing U-Boot & Initializing active_rootfs=rootfs_a..."
 mkdir -p /mnt/sd_boot
-mount /dev/mmcblk0p1 /mnt/sd_boot 2>/dev/null || true
+mount $SD_BOOT_PART /mnt/sd_boot 2>/dev/null || true
 
+EMMC_NAME=$(basename $EMMC_DEV)
 if [ -f /mnt/sd_boot/u-boot.imx ]; then
-    echo 0 > /sys/block/mmcblk1boot0/force_ro 2>/dev/null || true
-    dd if=/mnt/sd_boot/u-boot.imx of=/dev/mmcblk1boot0 bs=1K seek=1 conv=fsync status=none
-    echo 1 > /sys/block/mmcblk1boot0/force_ro 2>/dev/null || true
-    dd if=/mnt/sd_boot/u-boot.imx of=/dev/mmcblk1 bs=1K seek=1 conv=fsync status=none
+    echo 0 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
+    dd if=/mnt/sd_boot/u-boot.imx of=/dev/${EMMC_NAME}boot0 bs=1K seek=1 conv=fsync status=none 2>/dev/null || true
+    echo 1 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
+    dd if=/mnt/sd_boot/u-boot.imx of=$EMMC_DEV bs=1K seek=1 conv=fsync status=none
 fi
 
 umount /mnt/sd_boot 2>/dev/null || true
@@ -91,6 +124,7 @@ umount /mnt/sd_boot 2>/dev/null || true
 # Initialize U-Boot environment variables for A/B booting if fw_setenv is available
 if [ -x /usr/bin/fw_setenv ]; then
     fw_setenv active_rootfs rootfs_a || true
+    fw_setenv mmcpart 1 || true
     fw_setenv upgrade_available 0 || true
     fw_setenv bootcount 0 || true
     fw_setenv bootlimit 3 || true
@@ -103,9 +137,9 @@ sync
 echo ""
 echo "======================================================="
 echo " eMMC DUAL-BANK A/B FLASH COMPLETED SUCCESSFULLY!"
-echo " Bank A: /dev/mmcblk1p2 (Active)"
-echo " Bank B: /dev/mmcblk1p3 (OTA Target)"
-echo " Data:   /dev/mmcblk1p4 (Persistent)"
+echo " Bank A: $EMMC_ROOTA_PART (Active)"
+echo " Bank B: $EMMC_ROOTB_PART (OTA Target)"
+echo " Data:   $EMMC_DATA_PART (Persistent)"
 echo "======================================================="
 echo "To boot from eMMC:"
 echo " 1. Power off board"
