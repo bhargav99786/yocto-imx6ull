@@ -1,0 +1,17 @@
+[Unit]
+Description=Automatic eMMC Factory Flasher
+DefaultDependencies=no
+After=local-fs.target systemd-udev-settle.service
+Before=hmi-app.service
+ConditionPathExists=/etc/auto-flash-emmc
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/auto-flash-to-emmc
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutSec=300
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

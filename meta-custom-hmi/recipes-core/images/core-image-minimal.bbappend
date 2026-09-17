@@ -5,4 +5,5 @@ IMAGE_INSTALL:append = " \
     ttf-dejavu-common \
     fontconfig \
     evtest \
+    emmc-installer \
 "
