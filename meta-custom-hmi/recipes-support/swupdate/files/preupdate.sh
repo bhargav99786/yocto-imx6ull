@@ -2,6 +2,10 @@
 # SWUpdate Pre-Update Script
 # Dynamically determines inactive partition and sets /dev/update_target symlink
 
+if [ "$1" = "postinst" ]; then
+    exit 0
+fi
+
 CURRENT_ROOT=$(fw_printenv active_rootfs 2>/dev/null | cut -d'=' -f2)
 
 if [ "$CURRENT_ROOT" = "rootfs_b" ]; then

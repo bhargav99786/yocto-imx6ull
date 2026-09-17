@@ -2,6 +2,10 @@
 # SWUpdate Post-Update Script
 # Toggles U-Boot active partition variable upon successful OTA installation
 
+if [ "$1" = "preinst" ]; then
+    exit 0
+fi
+
 CURRENT_ROOT=$(fw_printenv active_rootfs 2>/dev/null | cut -d'=' -f2)
 
 if [ "$CURRENT_ROOT" = "rootfs_a" ]; then
