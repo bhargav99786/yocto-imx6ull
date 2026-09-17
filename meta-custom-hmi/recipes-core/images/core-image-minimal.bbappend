@@ -1,3 +1,5 @@
+IMAGE_FSTYPES += "ext4.gz"
+
 IMAGE_INSTALL:append = " \
     boot-splash \
     hmi-app \
@@ -6,4 +8,9 @@ IMAGE_INSTALL:append = " \
     fontconfig \
     evtest \
     emmc-installer \
+    swupdate \
+    swupdate-www \
+    libubootenv-bin \
+    ota-agent \
+    confirm-boot \
 "

@@ -4,18 +4,22 @@ software =
 	description = "Custom i.MX6ULL HMI Dual-Bank RootFS Update Package";
 
 	imx6ullevk = {
-		images: (
-			{
-				filename = "core-image-minimal-imx6ullevk.ext4.gz";
-				device = "/dev/mmcblk1p3";
-				type = "raw";
-				compressed = "gzip";
-			}
-		);
 		scripts: (
+			{
+				filename = "preupdate.sh";
+				type = "shellscript";
+			},
 			{
 				filename = "postupdate.sh";
 				type = "shellscript";
+			}
+		);
+		images: (
+			{
+				filename = "core-image-minimal-imx6ullevk.ext4.gz";
+				device = "/dev/update_target";
+				type = "raw";
+				compressed = "gzip";
 			}
 		);
 	};

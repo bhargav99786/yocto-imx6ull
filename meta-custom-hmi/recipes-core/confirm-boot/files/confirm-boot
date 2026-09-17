@@ -1,0 +1,16 @@
+#!/bin/sh
+# Confirm Boot Script
+# Disarms U-Boot watchdog rollback after successful startup of HMI app
+
+UPGRADE=$(fw_printenv upgrade_available 2>/dev/null | cut -d'=' -f2)
+
+if [ "$UPGRADE" = "1" ]; then
+    echo "[Confirm Boot] Successfully booted into new partition. Clearing upgrade_available flag..."
+    fw_setenv upgrade_available 0
+    fw_setenv bootcount 0
+    echo "[Confirm Boot] OTA update confirmed permanently!"
+else
+    echo "[Confirm Boot] System is running normally (upgrade_available != 1)."
+fi
+
+exit 0

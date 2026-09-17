@@ -1,0 +1,72 @@
+#!/bin/sh
+# Remote OTA Update Agent
+# Periodically queries OTA_SERVER_URL for updates and applies .swu packages via SWUpdate
+
+CONF_FILE="/etc/ota-server.conf"
+
+if [ -f "$CONF_FILE" ]; then
+    . "$CONF_FILE"
+fi
+
+OTA_SERVER_URL=${OTA_SERVER_URL:-"http://192.168.1.100:8000"}
+CHECK_INTERVAL=${CHECK_INTERVAL:-30}
+
+echo "[OTA Agent] Starting OTA update daemon. Server URL: ${OTA_SERVER_URL}"
+
+while true; do
+    sleep "$CHECK_INTERVAL"
+
+    # Fetch version manifest from server
+    MANIFEST="/tmp/ota_manifest.json"
+    rm -f "$MANIFEST"
+
+    curl -s -f "${OTA_SERVER_URL}/version.json" -o "$MANIFEST" 2>/dev/null
+    if [ $? -ne 0 ] || [ ! -s "$MANIFEST" ]; then
+        continue
+    fi
+
+    REMOTE_VER=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$MANIFEST" | cut -d'"' -f4)
+    UPDATE_URL=$(grep -o '"url"[[:space:]]*:[[:space:]]*"[^"]*"' "$MANIFEST" | cut -d'"' -f4)
+
+    if [ -z "$REMOTE_VER" ] || [ -z "$UPDATE_URL" ]; then
+        continue
+    fi
+
+    LOCAL_VER=""
+    if [ -f /etc/sw-versions ]; then
+        LOCAL_VER=$(cat /etc/sw-versions 2>/dev/null)
+    fi
+
+    if [ "$REMOTE_VER" != "$LOCAL_VER" ]; then
+        echo "[OTA Agent] New version available: $REMOTE_VER (Current: $LOCAL_VER)"
+        echo "[OTA Agent] Downloading update package from $UPDATE_URL..."
+
+        SWU_FILE="/tmp/update.swu"
+        rm -f "$SWU_FILE"
+
+        curl -s -f "$UPDATE_URL" -o "$SWU_FILE"
+        if [ $? -eq 0 ] && [ -s "$SWU_FILE" ]; then
+            echo "[OTA Agent] Download complete. Executing SWUpdate..."
+            
+            # Ensure target symlink is set before swupdate runs
+            CURRENT_ROOT=$(fw_printenv active_rootfs 2>/dev/null | cut -d'=' -f2)
+            if [ "$CURRENT_ROOT" = "rootfs_b" ]; then
+                ln -sf /dev/mmcblk1p2 /dev/update_target
+            else
+                ln -sf /dev/mmcblk1p3 /dev/update_target
+            fi
+
+            swupdate -i "$SWU_FILE"
+            if [ $? -eq 0 ]; then
+                echo "$REMOTE_VER" > /etc/sw-versions
+                echo "[OTA Agent] Update successful! Rebooting in 3 seconds..."
+                sleep 3
+                reboot
+            else
+                echo "[OTA Agent] SWUpdate failed to apply update."
+            fi
+        else
+            echo "[OTA Agent] Download failed."
+        fi
+    fi
+done

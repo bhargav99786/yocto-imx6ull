@@ -5,8 +5,35 @@ if test -z "${mmcdev}"; then
     setenv mmcdev 0
 fi
 
+# A/B Dual-Bank Active RootFS Selection
+if test -z "${active_rootfs}"; then
+    setenv active_rootfs "rootfs_a"
+fi
+
+# Watchdog / Bootcount check for Fail-Safe Rollback
+if test "${upgrade_available}" = "1"; then
+    setexpr bootcount ${bootcount} + 1
+    saveenv
+    if test ${bootcount} -gt ${bootlimit}; then
+        echo "OTA boot failed! Rolling back to previous rootfs bank..."
+        if test "${active_rootfs}" = "rootfs_b"; then
+            setenv active_rootfs "rootfs_a"
+        else
+            setenv active_rootfs "rootfs_b"
+        fi
+        setenv upgrade_available 0
+        saveenv
+    fi
+fi
+
 if test "${mmcdev}" = "1"; then
-    setenv mmcroot '/dev/mmcblk1p2 rootwait rw'
+    if test "${active_rootfs}" = "rootfs_b"; then
+        echo "--> Booting RootFS Bank B (/dev/mmcblk1p3)..."
+        setenv mmcroot '/dev/mmcblk1p3 rootwait rw'
+    else
+        echo "--> Booting RootFS Bank A (/dev/mmcblk1p2)..."
+        setenv mmcroot '/dev/mmcblk1p2 rootwait rw'
+    fi
 else
     setenv mmcroot '/dev/mmcblk0p2 rootwait rw'
 fi

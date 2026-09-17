@@ -1,0 +1,12 @@
+[Unit]
+Description=Confirm Boot Status for SWUpdate Rollback Guard
+After=hmi-app.service multi-user.target
+Wants=hmi-app.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/confirm-boot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

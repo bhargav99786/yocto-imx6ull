@@ -1,18 +1,16 @@
 #!/bin/sh
 # ============================================================
-# MarknStamp HMI - Automatic eMMC Factory Flasher
+# MarknStamp HMI - Automatic eMMC Factory Flasher (A/B Dual Bank)
 # Transfers system from SD Card (mmcblk0) to Onboard eMMC (mmcblk1)
 # ============================================================
 
 set -e
 
 EMMC_DEV="/dev/mmcblk1"
-EMMC_BOOT_PART="/dev/mmcblk1p1"
-EMMC_ROOT_PART="/dev/mmcblk1p2"
 FLAG_FILE="/etc/auto-flash-emmc"
 
 echo "======================================================="
-echo " Starting MarknStamp eMMC Flashing Process"
+echo " Starting MarknStamp eMMC Flashing Process (A/B Scheme)"
 echo "======================================================="
 
 # 1. Safety Check: Only proceed if booted from SD card
@@ -25,32 +23,48 @@ fi
 
 echo "Source device: $CURRENT_ROOT. Target device: $EMMC_DEV."
 
-# 2. Mount and update Boot Partition on eMMC
-echo "--> [1/4] Copying Boot partition files to $EMMC_BOOT_PART..."
+# 2. Partition eMMC into Dual-Bank A/B Layout if needed
+echo "--> [1/5] Partitioning $EMMC_DEV into Dual-Bank A/B layout..."
+umount /dev/mmcblk1p* 2>/dev/null || true
+
+sfdisk /dev/mmcblk1 << 'EOF_SFDISK'
+2048,131072,c,*
+151552,5120000,L
+5271552,5120000,L
+10391552,,L
+EOF_SFDISK
+
+sync
+partprobe /dev/mmcblk1 2>/dev/null || udevadm settle 2>/dev/null || sleep 2
+
+# 3. Format eMMC Partitions
+echo "--> [2/5] Formatting Partitions (p1: vfat boot, p2: rootfs_a, p3: rootfs_b, p4: data)..."
+mkfs.vfat -F 32 -n "BOOT" /dev/mmcblk1p1
+mkfs.ext4 -F -L "rootfs_a" /dev/mmcblk1p2
+mkfs.ext4 -F -L "rootfs_b" /dev/mmcblk1p3
+mkfs.ext4 -F -L "data" /dev/mmcblk1p4
+sync
+
+# 4. Copy Boot Partition Files
+echo "--> [3/5] Copying Boot partition files to /dev/mmcblk1p1..."
 mkdir -p /mnt/sd_boot /mnt/emmc_boot
 mount /dev/mmcblk0p1 /mnt/sd_boot 2>/dev/null || true
-mount "$EMMC_BOOT_PART" /mnt/emmc_boot
+mount /dev/mmcblk1p1 /mnt/emmc_boot
 
-cp -v /mnt/sd_boot/boot.scr /mnt/emmc_boot/boot.scr
+cp -v /mnt/sd_boot/boot.scr   /mnt/emmc_boot/boot.scr
 cp -v /mnt/sd_boot/splash.bmp /mnt/emmc_boot/splash.bmp 2>/dev/null || true
-cp -v /mnt/sd_boot/splash.bmp /mnt/emmc_boot/logo.bmp 2>/dev/null || true
-cp -v /mnt/sd_boot/zImage /mnt/emmc_boot/zImage
-cp -v /mnt/sd_boot/*.dtb /mnt/emmc_boot/ 2>/dev/null || true
+cp -v /mnt/sd_boot/splash.bmp /mnt/emmc_boot/logo.bmp   2>/dev/null || true
+cp -v /mnt/sd_boot/zImage     /mnt/emmc_boot/zImage
+cp -v /mnt/sd_boot/*.dtb      /mnt/emmc_boot/ 2>/dev/null || true
 
 sync
 umount /mnt/emmc_boot
 umount /mnt/sd_boot 2>/dev/null || true
-echo "Boot partition updated successfully."
 
-# 3. Format eMMC rootfs partition as ext4
-echo "--> [2/4] Formatting $EMMC_ROOT_PART as ext4..."
-mkfs.ext4 -F -L "rootfs" "$EMMC_ROOT_PART"
-sync
-
-# 4. Clone Root Filesystem to eMMC
-echo "--> [3/4] Cloning root filesystem to $EMMC_ROOT_PART..."
+# 5. Clone Root Filesystem to rootfs_a (/dev/mmcblk1p2)
+echo "--> [4/5] Cloning RootFS to Bank A (/dev/mmcblk1p2)..."
 mkdir -p /mnt/emmc_root
-mount "$EMMC_ROOT_PART" /mnt/emmc_root
+mount /dev/mmcblk1p2 /mnt/emmc_root
 
 cd /
 tar --exclude='./dev' \
@@ -60,23 +74,22 @@ tar --exclude='./dev' \
     --exclude='./run' \
     --exclude='./mnt' \
     --exclude='./media' \
+    --exclude='./data' \
     --exclude='./lost+found' \
     -cf - . | (cd /mnt/emmc_root && tar xpf -)
 
-# Create missing mountpoint directories
-mkdir -p /mnt/emmc_root/dev /mnt/emmc_root/proc /mnt/emmc_root/sys /mnt/emmc_root/tmp /mnt/emmc_root/run /mnt/emmc_root/mnt /mnt/emmc_root/media
+# Create missing mountpoint directories on eMMC rootfs_a
+mkdir -p /mnt/emmc_root/dev /mnt/emmc_root/proc /mnt/emmc_root/sys /mnt/emmc_root/tmp /mnt/emmc_root/run /mnt/emmc_root/mnt /mnt/emmc_root/media /mnt/emmc_root/data
 chmod 1777 /mnt/emmc_root/tmp
 
 # CRITICAL: Remove first-boot auto-flash flag from cloned eMMC rootfs
-# so the eMMC system never tries to flash itself
 rm -f /mnt/emmc_root/etc/auto-flash-emmc
 
 sync
 umount /mnt/emmc_root
-echo "Root filesystem cloned successfully."
 
-# 5. Flash U-Boot to eMMC boot partition
-echo "--> [4/4] Flashing U-Boot to eMMC boot partition..."
+# 6. Flash U-Boot and Initialize Active Bank
+echo "--> [5/5] Flashing U-Boot & Initializing active_rootfs=rootfs_a..."
 mkdir -p /mnt/sd_boot
 mount /dev/mmcblk0p1 /mnt/sd_boot 2>/dev/null || true
 
@@ -85,21 +98,28 @@ if [ -f /mnt/sd_boot/u-boot.imx ]; then
     dd if=/mnt/sd_boot/u-boot.imx of=/dev/mmcblk1boot0 bs=1K seek=1 conv=fsync status=progress
     echo 1 > /sys/block/mmcblk1boot0/force_ro 2>/dev/null || true
     dd if=/mnt/sd_boot/u-boot.imx of=/dev/mmcblk1 bs=1K seek=1 conv=fsync status=progress
-    echo "U-Boot flashed to eMMC."
-else
-    echo "Notice: /mnt/sd_boot/u-boot.imx not found, preserving existing eMMC U-Boot."
 fi
 
 umount /mnt/sd_boot 2>/dev/null || true
-sync
 
-# 6. Remove first-boot trigger flag from SD card to prevent re-flashing on reboot
+# Initialize U-Boot environment variables for A/B booting if fw_setenv is available
+if [ -x /usr/bin/fw_setenv ]; then
+    fw_setenv active_rootfs rootfs_a || true
+    fw_setenv upgrade_available 0 || true
+    fw_setenv bootcount 0 || true
+    fw_setenv bootlimit 3 || true
+fi
+
+# Remove first-boot trigger flag from SD card to prevent re-flashing on reboot
 rm -f "$FLAG_FILE" 2>/dev/null || true
 sync
 
 echo ""
 echo "======================================================="
-echo " eMMC FLASH COMPLETED SUCCESSFULLY!"
+echo " eMMC DUAL-BANK A/B FLASH COMPLETED SUCCESSFULLY!"
+echo " Bank A: /dev/mmcblk1p2 (Active)"
+echo " Bank B: /dev/mmcblk1p3 (OTA Target)"
+echo " Data:   /dev/mmcblk1p4 (Persistent)"
 echo "======================================================="
 echo "To boot from eMMC:"
 echo " 1. Power off board"

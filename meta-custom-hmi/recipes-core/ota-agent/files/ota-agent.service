@@ -1,0 +1,13 @@
+[Unit]
+Description=Remote OTA Update Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ota-update-agent
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
