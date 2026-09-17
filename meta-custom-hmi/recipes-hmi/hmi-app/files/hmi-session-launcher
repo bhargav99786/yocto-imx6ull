@@ -11,13 +11,34 @@ fi
 APP_EXEC="${APP_EXEC:-/opt/hmi/bin/app}"
 APP_PLATFORM="${APP_PLATFORM:-linuxfb:fb=/dev/fb0}"
 
-# Wait up to 5 seconds for touchscreen input device to appear
-for i in 1 2 3 4 5 6 7 8 9 10; do
-    if [ -e /dev/input/touchscreen0 ] || [ -e /dev/input/event0 ]; then
-        break
-    fi
-    sleep 0.5
-done
+# Settle udev events to ensure device symlinks are processed
+udevadm settle --timeout=3 2>/dev/null || true
+
+# Explicitly ensure /dev/input/touchscreen0 exists before starting Qt
+if [ ! -e /dev/input/touchscreen0 ]; then
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        if [ -e /dev/input/touchscreen0 ]; then
+            break
+        fi
+        for ev in /sys/class/input/event*; do
+            if [ -e "$ev/device/name" ] && grep -qi "goodix" "$ev/device/name" 2>/dev/null; then
+                ln -sf "/dev/input/$(basename $ev)" /dev/input/touchscreen0 2>/dev/null || true
+                break 2
+            fi
+        done
+        sleep 0.3
+    done
+fi
+
+# Fallback: if touchscreen0 still missing, link to event0
+if [ ! -e /dev/input/touchscreen0 ] && [ -e /dev/input/event0 ]; then
+    ln -sf /dev/input/event0 /dev/input/touchscreen0 2>/dev/null || true
+fi
+
+TS_DEVICE="/dev/input/touchscreen0"
+if [ ! -e "$TS_DEVICE" ] && [ -e "/dev/input/event0" ]; then
+    TS_DEVICE="/dev/input/event0"
+fi
 
 # If configured binary does not exist or is not executable, fall back to default demo
 if [ ! -x "$APP_EXEC" ]; then
@@ -27,22 +48,22 @@ fi
 
 # Export Qt Platform & Generic Plugin configurations (with rotate=90:invertx for 1024x600 display)
 export QT_QPA_PLATFORM="$APP_PLATFORM"
-export QT_QPA_GENERIC_PLUGINS="${QT_QPA_GENERIC_PLUGINS:-evdevtouch:/dev/input/touchscreen0:rotate=90:invertx}"
-export QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS="${QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS:-/dev/input/touchscreen0:rotate=90:invertx}"
+export QT_QPA_GENERIC_PLUGINS="${QT_QPA_GENERIC_PLUGINS:-evdevtouch:${TS_DEVICE}:rotate=90:invertx}"
+export QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS="${QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS:-${TS_DEVICE}:rotate=90:invertx}"
 export QT_QPA_FB_NO_LIBINPUT=1
 
 # Ensure font directories are accessible to Qt QBasicFontDatabase
-if [ -d "/usr/share/fonts/truetype/dejavu" ]; then
-    export QT_QPA_FONTDIR="/usr/share/fonts/truetype/dejavu"
-elif [ -d "/usr/share/fonts/truetype" ]; then
+if [ -d "/usr/share/fonts/truetype" ]; then
     export QT_QPA_FONTDIR="/usr/share/fonts/truetype"
+elif [ -d "/usr/share/fonts/truetype/dejavu" ]; then
+    export QT_QPA_FONTDIR="/usr/share/fonts/truetype/dejavu"
 fi
 
-# Ensure /usr/lib/fonts symlink exists for legacy Qt font lookups
-if [ ! -e "/usr/lib/fonts" ]; then
-    mkdir -p /usr/lib
-    ln -sf /usr/share/fonts/truetype /usr/lib/fonts 2>/dev/null || true
-fi
+# Ensure /usr/lib/fonts and dejavu symlinks exist for legacy Qt font lookups
+mkdir -p /usr/lib /usr/share/fonts/truetype 2>/dev/null || true
+[ ! -e "/usr/lib/fonts" ] && ln -sf /usr/share/fonts/truetype /usr/lib/fonts 2>/dev/null || true
+[ ! -e "/usr/share/fonts/truetype/dejavu" ] && ln -sf /usr/share/fonts/truetype /usr/share/fonts/truetype/dejavu 2>/dev/null || true
+
 
 if [ -n "$APP_EXTRA_ENV" ]; then
     export $APP_EXTRA_ENV

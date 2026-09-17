@@ -16,19 +16,25 @@ int main(int argc, char *argv[])
     }
 
     // 2. Configure evdevtouch with rotate=90:invertx for 1024x600 Goodix digitizer
+    const char *touchDev = "/dev/input/touchscreen0";
+    if (!QFile::exists(touchDev) && QFile::exists("/dev/input/event0")) {
+        touchDev = "/dev/input/event0";
+    }
     if (!qEnvironmentVariableIsSet("QT_QPA_GENERIC_PLUGINS")) {
-        qputenv("QT_QPA_GENERIC_PLUGINS", "evdevtouch:/dev/input/touchscreen0:rotate=90:invertx");
+        QByteArray plugin = QByteArray("evdevtouch:") + touchDev + ":rotate=90:invertx";
+        qputenv("QT_QPA_GENERIC_PLUGINS", plugin);
     }
     if (!qEnvironmentVariableIsSet("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS")) {
-        qputenv("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS", "/dev/input/touchscreen0:rotate=90:invertx");
+        QByteArray param = QByteArray(touchDev) + ":rotate=90:invertx";
+        qputenv("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS", param);
     }
 
     // 3. Configure font directory for Qt QBasicFontDatabase
     if (!qEnvironmentVariableIsSet("QT_QPA_FONTDIR")) {
-        if (QDir("/usr/share/fonts/truetype/dejavu").exists()) {
-            qputenv("QT_QPA_FONTDIR", "/usr/share/fonts/truetype/dejavu");
-        } else {
+        if (QDir("/usr/share/fonts/truetype").exists()) {
             qputenv("QT_QPA_FONTDIR", "/usr/share/fonts/truetype");
+        } else if (QDir("/usr/share/fonts/truetype/dejavu").exists()) {
+            qputenv("QT_QPA_FONTDIR", "/usr/share/fonts/truetype/dejavu");
         }
     }
 

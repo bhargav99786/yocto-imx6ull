@@ -1,1 +1,1 @@
-SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{name}=="*Goodix*", SYMLINK+="input/touchscreen0"
+SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{name}=="*[Gg]oodix*", SYMLINK+="input/touchscreen0"
