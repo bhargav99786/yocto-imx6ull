@@ -1,7 +1,7 @@
 #!/bin/sh
 # ============================================================
 # MarknStamp HMI - Automatic eMMC Factory Flasher (A/B Dual Bank)
-# Transfers system from SD Card (mmcblk0) to Onboard eMMC (mmcblk1)
+# Transfers system from SD Card (mmcblk0) to Onboard eMMC (mmcblk1/mmcblk2)
 # ============================================================
 
 set -e
@@ -12,7 +12,7 @@ echo "======================================================="
 echo " Starting MarknStamp eMMC Flashing Process (A/B Scheme)"
 echo "======================================================="
 
-# 1. Detect current root device and target eMMC device (>1GB disk that is not current root disk)
+# 1. Detect current root partition and root disk
 CURRENT_ROOT_PART=$(findmnt -n -o SOURCE / 2>/dev/null || mount | grep " / " | cut -d' ' -f1)
 CURRENT_ROOT_DISK=$(echo "$CURRENT_ROOT_PART" | sed -E 's/p[0-9]+$//')
 
@@ -22,10 +22,13 @@ if echo "$CURRENT_ROOT_PART" | grep -q "mmcblk1p" || echo "$CURRENT_ROOT_PART" |
     exit 0
 fi
 
-# Find main eMMC disk (>1GB = >2000000 512-byte sectors)
+# Find main eMMC disk (>1GB = >2000000 sectors) with maximum size
+MAX_SIZE=0
 EMMC_DEV=""
+
 for dev in /sys/block/mmcblk*; do
     DEVNAME=$(basename $dev)
+    # Skip hardware boot/rpmb partitions and current root disk
     if echo "$DEVNAME" | grep -q "boot" || echo "$DEVNAME" | grep -q "rpmb"; then
         continue
     fi
@@ -33,9 +36,9 @@ for dev in /sys/block/mmcblk*; do
         continue
     fi
     SIZE=$(cat $dev/size 2>/dev/null || echo 0)
-    if [ "$SIZE" -gt 2000000 ]; then
+    if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+        MAX_SIZE=$SIZE
         EMMC_DEV="/dev/$DEVNAME"
-        break
     fi
 done
 
