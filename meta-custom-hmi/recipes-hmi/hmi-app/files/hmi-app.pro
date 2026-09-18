@@ -10,13 +10,17 @@ SOURCES += \
     loginwindow.cpp \
     mainwindow.cpp \
     touchcanvas.cpp \
-    numpaddialog.cpp
+    numpaddialog.cpp \
+    touchcalibration.cpp \
+    calibrationdialog.cpp
 
 HEADERS += \
     loginwindow.h \
     mainwindow.h \
     touchcanvas.h \
-    numpaddialog.h
+    numpaddialog.h \
+    touchcalibration.h \
+    calibrationdialog.h
 
 target.path = /usr/bin
 INSTALLS += target

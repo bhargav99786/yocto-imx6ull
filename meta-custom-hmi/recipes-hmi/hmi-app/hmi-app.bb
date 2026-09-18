@@ -17,6 +17,10 @@ SRC_URI = " \
     file://touchcanvas.cpp \
     file://numpaddialog.h \
     file://numpaddialog.cpp \
+    file://touchcalibration.h \
+    file://touchcalibration.cpp \
+    file://calibrationdialog.h \
+    file://calibrationdialog.cpp \
     file://hmi-app.service \
     file://hmi-app.init \
     file://99-goodix.rules \

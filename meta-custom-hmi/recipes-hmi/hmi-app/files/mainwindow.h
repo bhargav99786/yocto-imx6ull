@@ -42,6 +42,11 @@ private slots:
     void onOtaVersionReply(QNetworkReply *reply);
     void onInstallOtaUpdate();
 
+    // Touch Calibration slots
+    void onCalibrateTouchClicked();
+    void onResetCalibrationClicked();
+    void updateCalibrationStatus();
+
 private:
     void setupUi();
     QWidget *createDashboardTab();
@@ -72,6 +77,9 @@ private:
     // Touch Test Tab widgets
     TouchCanvas *m_canvas;
     QLabel *m_touchCoordLabel;
+    QLabel *m_calibrationStatusLabel;
+    QPushButton *m_calibrateBtn;
+    QPushButton *m_resetCalibrationBtn;
 
     // Dashboard widgets
     QLabel *m_uptimeLabel;

@@ -7,6 +7,8 @@
 #include <QDir>
 #include "loginwindow.h"
 #include "mainwindow.h"
+#include "touchcalibration.h"
+#include "calibrationdialog.h"
 
 int main(int argc, char *argv[])
 {
@@ -39,6 +41,19 @@ int main(int argc, char *argv[])
     }
 
     QApplication app(argc, argv);
+
+    // Install global touch calibration filter to auto-correct all taps
+    TouchCalibrationFilter *calibFilter = new TouchCalibrationFilter(&app);
+    app.installEventFilter(calibFilter);
+
+    // Check for --calibrate CLI flag
+    for (int i = 1; i < argc; ++i) {
+        if (QString(argv[i]) == "--calibrate") {
+            CalibrationDialog dlg;
+            dlg.exec();
+            break;
+        }
+    }
 
     // Explicitly register DejaVu Sans fonts from system font paths
     const QStringList fontFiles = {

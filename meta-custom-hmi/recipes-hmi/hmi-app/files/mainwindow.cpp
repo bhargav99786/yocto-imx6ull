@@ -1,6 +1,8 @@
 #include "mainwindow.h"
 #include "touchcanvas.h"
 #include "numpaddialog.h"
+#include "touchcalibration.h"
+#include "calibrationdialog.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -205,15 +207,40 @@ QWidget *MainWindow::createTouchTestTab()
     makeColorBtn("Red", QColor(244, 67, 54));
     makeColorBtn("White", QColor(240, 244, 248));
 
-    vTools->addSpacing(10);
+    vTools->addSpacing(6);
 
     QPushButton *clearBtn = new QPushButton("Clear Canvas", toolsPanel);
-    clearBtn->setFixedHeight(44);
-    clearBtn->setStyleSheet("background-color: #2e3846; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px; border: 1px solid #455a64;");
+    clearBtn->setFixedHeight(36);
+    clearBtn->setStyleSheet("background-color: #2e3846; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px; border: 1px solid #455a64;");
     connect(clearBtn, &QPushButton::clicked, this, [this]() {
         if (m_canvas) m_canvas->clearCanvas();
     });
     vTools->addWidget(clearBtn);
+
+    vTools->addSpacing(8);
+
+    QLabel *calibTitle = new QLabel("Touch Calibration", toolsPanel);
+    calibTitle->setStyleSheet("font-size: 13px; font-weight: bold; color: #ff9800;");
+    vTools->addWidget(calibTitle);
+
+    m_calibrateBtn = new QPushButton("Calibrate Screen", toolsPanel);
+    m_calibrateBtn->setFixedHeight(40);
+    m_calibrateBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
+    connect(m_calibrateBtn, &QPushButton::clicked, this, &MainWindow::onCalibrateTouchClicked);
+    vTools->addWidget(m_calibrateBtn);
+
+    m_resetCalibrationBtn = new QPushButton("Reset to 1:1", toolsPanel);
+    m_resetCalibrationBtn->setFixedHeight(30);
+    m_resetCalibrationBtn->setStyleSheet("background-color: #21262d; color: #8b949e; font-size: 11px; border-radius: 4px; border: 1px solid #30363d;");
+    connect(m_resetCalibrationBtn, &QPushButton::clicked, this, &MainWindow::onResetCalibrationClicked);
+    vTools->addWidget(m_resetCalibrationBtn);
+
+    m_calibrationStatusLabel = new QLabel(TouchCalibration::instance().statusString(), toolsPanel);
+    m_calibrationStatusLabel->setStyleSheet("font-size: 11px; color: #81c784;");
+    m_calibrationStatusLabel->setWordWrap(true);
+    vTools->addWidget(m_calibrationStatusLabel);
+
+    connect(&TouchCalibration::instance(), &TouchCalibration::calibrationChanged, this, &MainWindow::updateCalibrationStatus);
 
     vTools->addStretch();
 
@@ -897,4 +924,26 @@ void MainWindow::onInstallOtaUpdate()
         m_otaStatusLabel->setStyleSheet("color: #81c784; font-size: 12px;");
     });
 }
+
+void MainWindow::onCalibrateTouchClicked()
+{
+    CalibrationDialog dlg(this);
+    if (dlg.exec() == QDialog::Accepted) {
+        updateCalibrationStatus();
+    }
+}
+
+void MainWindow::onResetCalibrationClicked()
+{
+    TouchCalibration::instance().reset();
+    updateCalibrationStatus();
+}
+
+void MainWindow::updateCalibrationStatus()
+{
+    if (m_calibrationStatusLabel) {
+        m_calibrationStatusLabel->setText(TouchCalibration::instance().statusString());
+    }
+}
+
 
