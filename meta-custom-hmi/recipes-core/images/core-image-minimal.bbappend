@@ -13,4 +13,5 @@ IMAGE_INSTALL:append = " \
     libubootenv-bin \
     ota-agent \
     confirm-boot \
+    touch-test \
 "

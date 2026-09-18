@@ -8,6 +8,10 @@
 #include <QPushButton>
 #include <QProgressBar>
 #include <QTabWidget>
+#include <QLineEdit>
+#include <QProcess>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 
 class TouchCanvas;
 
@@ -27,16 +31,34 @@ private slots:
     void onRebootClicked();
     void onShutdownClicked();
 
+    // Network & OTA slots
+    void onRenewDhcp();
+    void onRunPing();
+    void onPingProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void onPingReadyRead();
+    void onEditPingTarget();
+    void onEditServerClicked();
+    void onCheckOtaUpdate();
+    void onOtaVersionReply(QNetworkReply *reply);
+    void onInstallOtaUpdate();
+
 private:
     void setupUi();
     QWidget *createDashboardTab();
     QWidget *createTouchTestTab();
     QWidget *createHardwareControlTab();
+    QWidget *createNetworkOtaTab();
     QWidget *createSystemTab();
+
     QString getIpAddress();
     float getCpuTemperature();
     QString getSystemUptime();
     void getMemoryUsage(int &totalMb, int &usedMb);
+    void updateNetworkTabStats();
+    QString getActiveBootBank();
+    QString getInstalledOtaVersion();
+    void loadOtaServerConfig();
+    void saveOtaServerConfig(const QString &url);
 
     // Top status bar
     QLabel *m_clockLabel;
@@ -63,6 +85,29 @@ private:
     QLabel *m_brightnessValueLabel;
     QPushButton *m_ledToggleBtn;
     bool m_ledState;
+
+    // Network & OTA widgets
+    QLabel *m_eth0StatusLabel;
+    QLabel *m_eth1StatusLabel;
+    QPushButton *m_renewDhcpBtn;
+    QLabel *m_dhcpStatusLabel;
+
+    QLineEdit *m_pingTargetEdit;
+    QPushButton *m_runPingBtn;
+    QLabel *m_pingResultLabel;
+    QProcess *m_pingProcess;
+
+    QLabel *m_otaVersionLabel;
+    QLabel *m_otaBankLabel;
+    QLabel *m_otaServerLabel;
+    QPushButton *m_checkUpdateBtn;
+    QPushButton *m_installUpdateBtn;
+    QLabel *m_otaStatusLabel;
+    QNetworkAccessManager *m_netManager;
+
+    QString m_otaServerUrl;
+    QString m_remoteVersion;
+    QString m_remoteUpdateUrl;
 
     QTimer *m_timer;
 };

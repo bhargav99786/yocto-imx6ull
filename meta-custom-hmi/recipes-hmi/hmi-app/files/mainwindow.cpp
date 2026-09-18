@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "touchcanvas.h"
+#include "numpaddialog.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -11,11 +12,29 @@
 #include <QNetworkInterface>
 #include <QMessageBox>
 #include <QProcess>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QScrollArea>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_ledState(false)
+    , m_pingProcess(nullptr)
+    , m_netManager(nullptr)
 {
+    m_pingProcess = new QProcess(this);
+    connect(m_pingProcess, &QProcess::readyReadStandardOutput, this, &MainWindow::onPingReadyRead);
+    connect(m_pingProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+            this, &MainWindow::onPingProcessFinished);
+
+    m_netManager = new QNetworkAccessManager(this);
+    connect(m_netManager, &QNetworkAccessManager::finished, this, &MainWindow::onOtaVersionReply);
+
+    loadOtaServerConfig();
+
     setupUi();
 
     m_timer = new QTimer(this);
@@ -79,6 +98,7 @@ void MainWindow::setupUi()
     m_tabWidget->addTab(createDashboardTab(), "System Dashboard");
     m_tabWidget->addTab(createTouchTestTab(), "Touch Screen Test");
     m_tabWidget->addTab(createHardwareControlTab(), "Hardware & Display");
+    m_tabWidget->addTab(createNetworkOtaTab(), "Network & OTA");
     m_tabWidget->addTab(createSystemTab(), "System & Power");
 
     mainLayout->addWidget(m_tabWidget);
@@ -330,6 +350,8 @@ void MainWindow::updateClockAndStats()
         m_ramBar->setValue(pct);
         m_ramTextLabel->setText(QString("RAM: %1 MB / %2 MB (%3%)").arg(usedMb).arg(totalMb).arg(pct));
     }
+
+    updateNetworkTabStats();
 }
 
 void MainWindow::onTouchCoordinates(int x, int y, bool isDown)
@@ -439,3 +461,440 @@ void MainWindow::getMemoryUsage(int &totalMb, int &usedMb)
         usedMb = (memTotal - freeKb) / 1024;
     }
 }
+
+// ============================================================
+//               NETWORK & OTA UPDATES TAB
+// ============================================================
+
+QWidget *MainWindow::createNetworkOtaTab()
+{
+    QWidget *tab = new QWidget(this);
+    QHBoxLayout *mainHLayout = new QHBoxLayout(tab);
+    mainHLayout->setContentsMargins(14, 12, 14, 12);
+    mainHLayout->setSpacing(14);
+
+    auto makeCard = [](const QString &title, const QString &accentCol) -> QGroupBox* {
+        QGroupBox *box = new QGroupBox(title);
+        box->setStyleSheet(QString(
+            "QGroupBox { font-size: 14px; font-weight: bold; color: %1; border: 1px solid #233242; border-radius: 8px; margin-top: 8px; padding-top: 14px; background-color: #141c26; }"
+            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; }"
+        ).arg(accentCol));
+        return box;
+    };
+
+    // ================= LEFT COLUMN: ETHERNET & PING =================
+    QVBoxLayout *leftCol = new QVBoxLayout();
+    leftCol->setSpacing(10);
+
+    // 1. Ethernet Status Card
+    QGroupBox *ethBox = makeCard("Ethernet Interfaces (eth0 / eth1)", "#00d2ff");
+    QVBoxLayout *ethLayout = new QVBoxLayout(ethBox);
+    ethLayout->setSpacing(8);
+
+    m_eth0StatusLabel = new QLabel("eth0: Checking...", ethBox);
+    m_eth0StatusLabel->setStyleSheet("font-size: 13px; color: #ffffff; font-family: monospace;");
+    ethLayout->addWidget(m_eth0StatusLabel);
+
+    m_eth1StatusLabel = new QLabel("eth1: Checking...", ethBox);
+    m_eth1StatusLabel->setStyleSheet("font-size: 13px; color: #ffffff; font-family: monospace;");
+    ethLayout->addWidget(m_eth1StatusLabel);
+
+    QHBoxLayout *dhcpBtnLayout = new QHBoxLayout();
+    m_renewDhcpBtn = new QPushButton("Renew Auto-IP (DHCP)", ethBox);
+    m_renewDhcpBtn->setFixedHeight(40);
+    m_renewDhcpBtn->setStyleSheet("background-color: #0288d1; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
+    connect(m_renewDhcpBtn, &QPushButton::clicked, this, &MainWindow::onRenewDhcp);
+
+    m_dhcpStatusLabel = new QLabel("DHCP: Ready", ethBox);
+    m_dhcpStatusLabel->setStyleSheet("font-size: 12px; color: #81c784;");
+
+    dhcpBtnLayout->addWidget(m_renewDhcpBtn);
+    dhcpBtnLayout->addWidget(m_dhcpStatusLabel);
+    ethLayout->addLayout(dhcpBtnLayout);
+    leftCol->addWidget(ethBox);
+
+    // 2. Ping Test Card
+    QGroupBox *pingBox = makeCard("Network Connectivity Test (Ping)", "#4caf50");
+    QVBoxLayout *pingLayout = new QVBoxLayout(pingBox);
+    pingLayout->setSpacing(8);
+
+    QHBoxLayout *targetLayout = new QHBoxLayout();
+    m_pingTargetEdit = new QLineEdit("192.168.1.1", pingBox);
+    m_pingTargetEdit->setFixedHeight(38);
+    m_pingTargetEdit->setReadOnly(true);
+    m_pingTargetEdit->setStyleSheet("background-color: #1a2432; color: #ffffff; font-size: 14px; font-weight: bold; padding: 0 8px; border: 1px solid #334d66; border-radius: 6px;");
+
+    QPushButton *editTargetBtn = new QPushButton("Touch to Edit", pingBox);
+    editTargetBtn->setFixedHeight(38);
+    editTargetBtn->setStyleSheet("background-color: #263238; color: #00d2ff; font-size: 12px; font-weight: bold; border-radius: 6px; padding: 0 10px;");
+    connect(editTargetBtn, &QPushButton::clicked, this, &MainWindow::onEditPingTarget);
+
+    targetLayout->addWidget(m_pingTargetEdit, 1);
+    targetLayout->addWidget(editTargetBtn);
+    pingLayout->addLayout(targetLayout);
+
+    // Quick target presets
+    QHBoxLayout *presetsLayout = new QHBoxLayout();
+    presetsLayout->setSpacing(6);
+    auto addPreset = [this, presetsLayout, pingBox](const QString &name, const QString &ip) {
+        QPushButton *b = new QPushButton(name, pingBox);
+        b->setFixedHeight(30);
+        b->setStyleSheet("background-color: #1f2d3d; color: #90caf9; font-size: 11px; border-radius: 4px;");
+        connect(b, &QPushButton::clicked, [this, ip]() {
+            m_pingTargetEdit->setText(ip);
+        });
+        presetsLayout->addWidget(b);
+    };
+    addPreset("Gateway", "192.168.1.1");
+    addPreset("OTA Server", m_otaServerUrl.section("//", 1, 1).section(':', 0, 0));
+    addPreset("DNS (8.8.8.8)", "8.8.8.8");
+    pingLayout->addLayout(presetsLayout);
+
+    m_runPingBtn = new QPushButton("Run Ping Test", pingBox);
+    m_runPingBtn->setFixedHeight(42);
+    m_runPingBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+    connect(m_runPingBtn, &QPushButton::clicked, this, &MainWindow::onRunPing);
+    pingLayout->addWidget(m_runPingBtn);
+
+    m_pingResultLabel = new QLabel("Result: Ready to test", pingBox);
+    m_pingResultLabel->setFixedHeight(38);
+    m_pingResultLabel->setStyleSheet("background-color: #0d131a; color: #b0bec5; font-size: 12px; font-family: monospace; border: 1px solid #1e2c3c; border-radius: 4px; padding: 4px;");
+    pingLayout->addWidget(m_pingResultLabel);
+
+    leftCol->addWidget(pingBox);
+    mainHLayout->addLayout(leftCol, 1);
+
+    // ================= RIGHT COLUMN: OTA & DUAL-BANK =================
+    QVBoxLayout *rightCol = new QVBoxLayout();
+    rightCol->setSpacing(10);
+
+    // 3. OTA System & Dual-Bank Card
+    QGroupBox *otaInfoBox = makeCard("System Version & Dual-Bank Status", "#ab47bc");
+    QVBoxLayout *otaInfoLayout = new QVBoxLayout(otaInfoBox);
+    otaInfoLayout->setSpacing(8);
+
+    m_otaVersionLabel = new QLabel(QString("Installed Version: %1").arg(getInstalledOtaVersion()), otaInfoBox);
+    m_otaVersionLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: #e1bee7;");
+    otaInfoLayout->addWidget(m_otaVersionLabel);
+
+    m_otaBankLabel = new QLabel(QString("Active RootFS: %1").arg(getActiveBootBank()), otaInfoBox);
+    m_otaBankLabel->setStyleSheet("font-size: 13px; color: #ce93d8;");
+    otaInfoLayout->addWidget(m_otaBankLabel);
+
+    rightCol->addWidget(otaInfoBox);
+
+    // 4. OTA Server Configuration Card
+    QGroupBox *serverBox = makeCard("OTA Server Endpoint", "#ff9800");
+    QVBoxLayout *serverLayout = new QVBoxLayout(serverBox);
+    serverLayout->setSpacing(8);
+
+    m_otaServerLabel = new QLabel(QString("Server: %1").arg(m_otaServerUrl), serverBox);
+    m_otaServerLabel->setStyleSheet("font-size: 13px; color: #ffe0b2; font-family: monospace;");
+    m_otaServerLabel->setWordWrap(true);
+    serverLayout->addWidget(m_otaServerLabel);
+
+    QPushButton *editServerBtn = new QPushButton("Edit Server URL", serverBox);
+    editServerBtn->setFixedHeight(40);
+    editServerBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
+    connect(editServerBtn, &QPushButton::clicked, this, &MainWindow::onEditServerClicked);
+    serverLayout->addWidget(editServerBtn);
+
+    rightCol->addWidget(serverBox);
+
+    // 5. Update Checker & Action Card
+    QGroupBox *updateBox = makeCard("Firmware Update Management", "#00e676");
+    QVBoxLayout *updateLayout = new QVBoxLayout(updateBox);
+    updateLayout->setSpacing(8);
+
+    m_checkUpdateBtn = new QPushButton("Check for Update", updateBox);
+    m_checkUpdateBtn->setFixedHeight(42);
+    m_checkUpdateBtn->setStyleSheet("background-color: #00897b; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+    connect(m_checkUpdateBtn, &QPushButton::clicked, this, &MainWindow::onCheckOtaUpdate);
+    updateLayout->addWidget(m_checkUpdateBtn);
+
+    m_installUpdateBtn = new QPushButton("Install Update Now", updateBox);
+    m_installUpdateBtn->setFixedHeight(42);
+    m_installUpdateBtn->setStyleSheet("background-color: #00c853; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+    m_installUpdateBtn->setVisible(false);
+    connect(m_installUpdateBtn, &QPushButton::clicked, this, &MainWindow::onInstallOtaUpdate);
+    updateLayout->addWidget(m_installUpdateBtn);
+
+    m_otaStatusLabel = new QLabel("Status: Idle", updateBox);
+    m_otaStatusLabel->setFixedHeight(36);
+    m_otaStatusLabel->setStyleSheet("background-color: #0d131a; color: #b2dfdb; font-size: 12px; border: 1px solid #1e2c3c; border-radius: 4px; padding: 4px;");
+    m_otaStatusLabel->setWordWrap(true);
+    updateLayout->addWidget(m_otaStatusLabel);
+
+    rightCol->addWidget(updateBox);
+    mainHLayout->addLayout(rightCol, 1);
+
+    updateNetworkTabStats();
+
+    return tab;
+}
+
+void MainWindow::updateNetworkTabStats()
+{
+    if (!m_eth0StatusLabel || !m_eth1StatusLabel) return;
+
+    auto getIfaceDetails = [](const QString &ifname) -> QString {
+        QNetworkInterface iface = QNetworkInterface::interfaceFromName(ifname);
+        if (!iface.isValid()) return QString("%1: Not Present").arg(ifname);
+
+        bool isUp = iface.flags().testFlag(QNetworkInterface::IsUp) &&
+                    iface.flags().testFlag(QNetworkInterface::IsRunning);
+
+        QString ip = "No IP";
+        QString mask = "";
+        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+            if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol) {
+                ip = entry.ip().toString();
+                mask = entry.netmask().toString();
+                break;
+            }
+        }
+
+        QString mac = iface.hardwareAddress();
+        if (mac.isEmpty()) mac = "--:--:--:--:--:--";
+
+        return QString("%1: [%2]  IP: %3\n      Mask: %4  MAC: %5")
+            .arg(ifname)
+            .arg(isUp ? "LINK UP" : "LINK DOWN")
+            .arg(ip)
+            .arg(mask.isEmpty() ? "--" : mask)
+            .arg(mac);
+    };
+
+    m_eth0StatusLabel->setText(getIfaceDetails("eth0"));
+    m_eth1StatusLabel->setText(getIfaceDetails("eth1"));
+}
+
+void MainWindow::onRenewDhcp()
+{
+    m_renewDhcpBtn->setEnabled(false);
+    m_renewDhcpBtn->setText("Renewing Auto-IP...");
+    m_dhcpStatusLabel->setText("DHCP: Requesting IP...");
+    m_dhcpStatusLabel->setStyleSheet("color: #ffa726; font-size: 12px;");
+
+    QProcess::startDetached("/bin/sh", QStringList() << "-c"
+        << "systemctl restart systemd-networkd 2>/dev/null || networkctl reconfigure eth0 eth1 2>/dev/null || true");
+
+    QTimer::singleShot(3000, this, [this]() {
+        m_renewDhcpBtn->setEnabled(true);
+        m_renewDhcpBtn->setText("Renew Auto-IP (DHCP)");
+        m_dhcpStatusLabel->setText("DHCP: Renewed");
+        m_dhcpStatusLabel->setStyleSheet("color: #81c784; font-size: 12px;");
+        updateNetworkTabStats();
+    });
+}
+
+void MainWindow::onEditPingTarget()
+{
+    NumpadDialog dlg("Enter Ping Target Host / IP", m_pingTargetEdit->text(), this);
+    if (dlg.exec() == QDialog::Accepted) {
+        QString val = dlg.getValue();
+        if (!val.isEmpty()) {
+            m_pingTargetEdit->setText(val);
+        }
+    }
+}
+
+void MainWindow::onRunPing()
+{
+    QString target = m_pingTargetEdit->text().trimmed();
+    if (target.isEmpty()) return;
+
+    m_runPingBtn->setEnabled(false);
+    m_runPingBtn->setText("Pinging...");
+    m_runPingBtn->setStyleSheet("background-color: #f57f17; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+    m_pingResultLabel->setText(QString("Pinging %1 (3 packets)...").arg(target));
+    m_pingResultLabel->setStyleSheet("background-color: #0d131a; color: #ffa726; font-size: 12px; font-family: monospace; border: 1px solid #1e2c3c; border-radius: 4px; padding: 4px;");
+
+    m_pingProcess->kill();
+    m_pingProcess->start("ping", QStringList() << "-c" << "3" << "-W" << "2" << target);
+}
+
+void MainWindow::onPingReadyRead()
+{
+    QString out = m_pingProcess->readAllStandardOutput();
+    if (out.contains("rtt") || out.contains("round-trip")) {
+        QString stats = out.section("rtt min/avg/max/mdev = ", 1, 1).trimmed();
+        if (stats.isEmpty()) stats = out.section("round-trip min/avg/max = ", 1, 1).trimmed();
+        if (!stats.isEmpty()) {
+            QString avg = stats.split('/').value(1);
+            m_pingResultLabel->setText(QString("🟢 Reachable! Avg Latency: %1 ms").arg(avg));
+            m_pingResultLabel->setStyleSheet("background-color: #0d131a; color: #4caf50; font-size: 12px; font-weight: bold; font-family: monospace; border: 1px solid #2e7d32; border-radius: 4px; padding: 4px;");
+        }
+    }
+}
+
+void MainWindow::onPingProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    Q_UNUSED(exitStatus);
+    m_runPingBtn->setEnabled(true);
+    m_runPingBtn->setText("Run Ping Test");
+    m_runPingBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+
+    if (exitCode != 0) {
+        m_pingResultLabel->setText("🔴 Host Unreachable / 100% Packet Loss");
+        m_pingResultLabel->setStyleSheet("background-color: #0d131a; color: #ef5350; font-size: 12px; font-weight: bold; font-family: monospace; border: 1px solid #c62828; border-radius: 4px; padding: 4px;");
+    }
+}
+
+QString MainWindow::getInstalledOtaVersion()
+{
+    QFile f("/etc/sw-versions");
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString ver = f.readAll().trimmed();
+        f.close();
+        if (!ver.isEmpty()) return ver;
+    }
+    QFile f2("/etc/version");
+    if (f2.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString ver2 = f2.readAll().trimmed();
+        f2.close();
+        if (!ver2.isEmpty()) return ver2;
+    }
+    return "v1.0.0";
+}
+
+QString MainWindow::getActiveBootBank()
+{
+    QFile f("/proc/cmdline");
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString cmd = f.readAll();
+        f.close();
+        if (cmd.contains("mmcblk0p3") || cmd.contains("mmcblk1p3")) {
+            return "Bank B (Secondary RootFS)";
+        }
+    }
+    return "Bank A (Primary RootFS)";
+}
+
+void MainWindow::loadOtaServerConfig()
+{
+    m_otaServerUrl = "http://192.168.1.100:8000";
+    QFile f("/etc/ota-server.conf");
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&f);
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (line.startsWith("OTA_SERVER_URL=")) {
+                m_otaServerUrl = line.section("=", 1).replace("\"", "").replace("'", "").trimmed();
+            }
+        }
+        f.close();
+    }
+}
+
+void MainWindow::saveOtaServerConfig(const QString &url)
+{
+    m_otaServerUrl = url.trimmed();
+    QFile f("/etc/ota-server.conf");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&f);
+        out << "OTA_SERVER_URL=\"" << m_otaServerUrl << "\"\n";
+        out << "CHECK_INTERVAL=30\n";
+        f.close();
+    }
+    if (m_otaServerLabel) {
+        m_otaServerLabel->setText(QString("Server: %1").arg(m_otaServerUrl));
+    }
+}
+
+void MainWindow::onEditServerClicked()
+{
+    NumpadDialog dlg("Configure OTA Server URL", m_otaServerUrl, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        QString val = dlg.getValue();
+        if (!val.isEmpty()) {
+            if (!val.startsWith("http://") && !val.startsWith("https://")) {
+                val = "http://" + val;
+            }
+            saveOtaServerConfig(val);
+            m_otaStatusLabel->setText("Server URL saved to /etc/ota-server.conf");
+            m_otaStatusLabel->setStyleSheet("color: #81c784; font-size: 12px;");
+        }
+    }
+}
+
+void MainWindow::onCheckOtaUpdate()
+{
+    m_checkUpdateBtn->setEnabled(false);
+    m_checkUpdateBtn->setText("Checking Server...");
+    m_installUpdateBtn->setVisible(false);
+
+    QString queryUrl = m_otaServerUrl;
+    if (!queryUrl.endsWith('/')) queryUrl += '/';
+    queryUrl += "version.json";
+
+    m_otaStatusLabel->setText(QString("Querying %1 ...").arg(queryUrl));
+    m_otaStatusLabel->setStyleSheet("color: #ffe082; font-size: 12px;");
+
+    QNetworkRequest req((QUrl(queryUrl)));
+    req.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    m_netManager->get(req);
+}
+
+void MainWindow::onOtaVersionReply(QNetworkReply *reply)
+{
+    m_checkUpdateBtn->setEnabled(true);
+    m_checkUpdateBtn->setText("Check for Update");
+
+    if (reply->error() != QNetworkReply::NoError) {
+        m_otaStatusLabel->setText(QString("Error: %1").arg(reply->errorString()));
+        m_otaStatusLabel->setStyleSheet("color: #ef5350; font-size: 12px;");
+        reply->deleteLater();
+        return;
+    }
+
+    QByteArray data = reply->readAll();
+    reply->deleteLater();
+
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject()) {
+        m_otaStatusLabel->setText("Error: Invalid JSON manifest received from server");
+        m_otaStatusLabel->setStyleSheet("color: #ef5350; font-size: 12px;");
+        return;
+    }
+
+    QJsonObject obj = doc.object();
+    m_remoteVersion = obj.value("version").toString();
+    m_remoteUpdateUrl = obj.value("url").toString();
+
+    QString localVersion = getInstalledOtaVersion();
+
+    if (m_remoteVersion.isEmpty()) {
+        m_otaStatusLabel->setText("Error: 'version' field missing in version.json");
+        m_otaStatusLabel->setStyleSheet("color: #ef5350; font-size: 12px;");
+        return;
+    }
+
+    if (m_remoteVersion == localVersion) {
+        m_otaStatusLabel->setText(QString("System is up to date (Version: %1)").arg(localVersion));
+        m_otaStatusLabel->setStyleSheet("color: #81c784; font-size: 12px; font-weight: bold;");
+        m_installUpdateBtn->setVisible(false);
+    } else {
+        m_otaStatusLabel->setText(QString("New version available: %1 (Current: %2)").arg(m_remoteVersion).arg(localVersion));
+        m_otaStatusLabel->setStyleSheet("color: #00e676; font-size: 12px; font-weight: bold;");
+        m_installUpdateBtn->setText(QString("Install Update (%1)").arg(m_remoteVersion));
+        m_installUpdateBtn->setVisible(true);
+    }
+}
+
+void MainWindow::onInstallOtaUpdate()
+{
+    m_installUpdateBtn->setEnabled(false);
+    m_installUpdateBtn->setText("Updating...");
+    m_otaStatusLabel->setText("Triggering background SWUpdate agent...");
+    m_otaStatusLabel->setStyleSheet("color: #00d2ff; font-size: 12px;");
+
+    QProcess::startDetached("/usr/bin/ota-update-agent");
+
+    QTimer::singleShot(4000, this, [this]() {
+        m_installUpdateBtn->setEnabled(true);
+        m_otaStatusLabel->setText("Update agent started in background. Device will reboot when done.");
+        m_otaStatusLabel->setStyleSheet("color: #81c784; font-size: 12px;");
+    });
+}
+

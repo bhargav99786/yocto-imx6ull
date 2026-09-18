@@ -9,12 +9,14 @@ SOURCES += \
     main.cpp \
     loginwindow.cpp \
     mainwindow.cpp \
-    touchcanvas.cpp
+    touchcanvas.cpp \
+    numpaddialog.cpp
 
 HEADERS += \
     loginwindow.h \
     mainwindow.h \
-    touchcanvas.h
+    touchcanvas.h \
+    numpaddialog.h
 
 target.path = /usr/bin
 INSTALLS += target
