@@ -1,4 +1,5 @@
 #include "loginwindow.h"
+#include "calibrationdialog.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -111,6 +112,20 @@ void LoginWindow::setupUi()
     leftLayout->addWidget(m_titleLabel);
     leftLayout->addWidget(m_subtitleLabel);
     leftLayout->addStretch(3);
+
+    // Calibration button on Login Screen
+    QPushButton *calibBtn = new QPushButton("🎯 Calibrate Touchscreen", leftPanel);
+    calibBtn->setFixedHeight(42);
+    calibBtn->setStyleSheet(
+        "QPushButton {"
+        "  background-color: #111d2e; color: #00d2ff; font-size: 13px; font-weight: bold;"
+        "  border: 1px solid #1f3654; border-radius: 6px; padding: 0 16px;"
+        "}"
+        "QPushButton:hover { background-color: #1a2f4a; border-color: #00d2ff; }"
+    );
+    connect(calibBtn, &QPushButton::clicked, this, &LoginWindow::onCalibrateTouchClicked);
+    leftLayout->addWidget(calibBtn);
+    leftLayout->addSpacing(12);
 
     // Footer
     QLabel *footer = new QLabel("Authorized access only", leftPanel);
@@ -419,3 +434,10 @@ void LoginWindow::shakePinDisplay()
     anim->setKeyValueAt(1.0,  orig);
     anim->start(QAbstractAnimation::DeleteWhenStopped);
 }
+
+void LoginWindow::onCalibrateTouchClicked()
+{
+    CalibrationDialog dlg(this);
+    dlg.exec();
+}
+

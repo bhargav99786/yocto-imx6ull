@@ -46,13 +46,18 @@ int main(int argc, char *argv[])
     TouchCalibrationFilter *calibFilter = new TouchCalibrationFilter(&app);
     app.installEventFilter(calibFilter);
 
-    // Check for --calibrate CLI flag
+    // Auto-launch calibration on first boot (if uncalibrated) or if --calibrate is passed
+    bool needCalibrate = !TouchCalibration::instance().isCalibrated() || !QFile::exists("/etc/touch-calibration.json");
     for (int i = 1; i < argc; ++i) {
         if (QString(argv[i]) == "--calibrate") {
-            CalibrationDialog dlg;
-            dlg.exec();
+            needCalibrate = true;
             break;
         }
+    }
+
+    if (needCalibrate) {
+        CalibrationDialog dlg;
+        dlg.exec();
     }
 
     // Explicitly register DejaVu Sans fonts from system font paths

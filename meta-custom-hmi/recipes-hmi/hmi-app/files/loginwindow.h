@@ -33,6 +33,7 @@ private slots:
     void onLoginPressed();
     void onClearPressed();
     void updateClock();
+    void onCalibrateTouchClicked();
 
 private:
     void setupUi();
