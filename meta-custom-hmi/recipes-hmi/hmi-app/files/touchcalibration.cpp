@@ -42,16 +42,17 @@ QPoint TouchCalibration::map(const QPoint &p) const
     return QPoint(qRound(pf.x()), qRound(pf.y()));
 }
 
-void TouchCalibration::setCalibration(double sx, double sy, double ox, double oy)
+bool TouchCalibration::setCalibration(double sx, double sy, double ox, double oy)
 {
-    // Sanity checks: scale must be between 0.5 and 2.0, offsets within [-300, 300]
-    if (sx < 0.5 || sx > 2.0 || sy < 0.5 || sy > 2.0) {
-        qWarning("TouchCalibration: Out-of-bounds scale factors, ignoring");
-        return;
+    // Sanity checks: strictly enforce physical bounds for 1024x600 Goodix digitizer
+    // Scale must be within [0.85, 1.15], offsets within [-40.0, 40.0] pixels
+    if (sx < 0.85 || sx > 1.15 || sy < 0.85 || sy > 1.15) {
+        qWarning("TouchCalibration: Out-of-bounds scale factors (sx=%f, sy=%f), rejecting", sx, sy);
+        return false;
     }
-    if (qAbs(ox) > 300.0 || qAbs(oy) > 300.0) {
-        qWarning("TouchCalibration: Out-of-bounds offsets, ignoring");
-        return;
+    if (qAbs(ox) > 40.0 || qAbs(oy) > 40.0) {
+        qWarning("TouchCalibration: Out-of-bounds offsets (ox=%f, oy=%f), rejecting", ox, oy);
+        return false;
     }
 
     m_scaleX = sx;
@@ -62,6 +63,7 @@ void TouchCalibration::setCalibration(double sx, double sy, double ox, double oy
 
     save();
     emit calibrationChanged();
+    return true;
 }
 
 void TouchCalibration::reset()
@@ -97,8 +99,14 @@ bool TouchCalibration::load(const QString &path)
     m_offsetY = obj.value("offset_y").toDouble(0.0);
     m_calibrated = obj.value("calibrated").toBool(false);
 
-    if (m_scaleX < 0.5 || m_scaleX > 2.0) m_scaleX = 1.0;
-    if (m_scaleY < 0.5 || m_scaleY > 2.0) m_scaleY = 1.0;
+    // Self-healing check: if any loaded value exceeds physical reality, discard and reset
+    if (m_scaleX < 0.85 || m_scaleX > 1.15 || m_scaleY < 0.85 || m_scaleY > 1.15 ||
+        qAbs(m_offsetX) > 40.0 || qAbs(m_offsetY) > 40.0) {
+        qWarning("TouchCalibration: Corrupted calibration file detected in %s (ox=%f, oy=%f). Resetting to 1:1 safe mode.",
+                 qPrintable(path), m_offsetX, m_offsetY);
+        reset();
+        return false;
+    }
 
     return true;
 }

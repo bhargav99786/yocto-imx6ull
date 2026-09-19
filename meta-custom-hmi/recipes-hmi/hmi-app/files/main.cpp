@@ -58,6 +58,9 @@ int main(int argc, char *argv[])
     if (needCalibrate) {
         CalibrationDialog dlg;
         dlg.exec();
+        if (!QFile::exists("/etc/touch-calibration.json")) {
+            TouchCalibration::instance().save();
+        }
     }
 
     // Explicitly register DejaVu Sans fonts from system font paths

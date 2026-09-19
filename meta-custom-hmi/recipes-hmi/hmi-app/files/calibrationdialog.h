@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QTimer>
+#include <QElapsedTimer>
 
 class CalibrationDialog : public QDialog
 {
@@ -21,6 +22,7 @@ protected:
 
 private:
     void calculateAndFinish();
+    void onSkipClicked();
 
     int m_currentStep;
     QVector<QPoint> m_targetPoints;
@@ -30,8 +32,11 @@ private:
     QLabel *m_instructionLabel;
     QLabel *m_statusLabel;
     QPushButton *m_cancelBtn;
+    QPushButton *m_skipBtn;
     QTimer *m_pulseTimer;
     int m_pulsePhase;
+    QElapsedTimer m_tapDebounce;
 };
 
 #endif // CALIBRATIONDIALOG_H
+

@@ -5,12 +5,14 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QDebug>
+#include <cmath>
 
 CalibrationDialog::CalibrationDialog(QWidget *parent)
     : QDialog(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint),
       m_currentStep(0),
       m_pulsePhase(0)
 {
+    m_tapDebounce.invalidate();
     setFixedSize(1024, 600);
     setStyleSheet("background-color: #0a0e14;");
 
@@ -53,10 +55,22 @@ CalibrationDialog::CalibrationDialog(QWidget *parent)
 
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
-    m_cancelBtn = new QPushButton("Cancel Calibration", this);
-    m_cancelBtn->setFixedSize(180, 42);
+
+    m_skipBtn = new QPushButton("Skip / Keep Default (1:1)", this);
+    m_skipBtn->setFixedSize(210, 42);
+    m_skipBtn->setStyleSheet(
+        "QPushButton { background-color: #161b22; color: #58a6ff; font-size: 13px; font-weight: bold; border: 1px solid #30363d; border-radius: 6px; }"
+        "QPushButton:hover { background-color: #21262d; border-color: #58a6ff; }"
+    );
+    connect(m_skipBtn, &QPushButton::clicked, this, &CalibrationDialog::onSkipClicked);
+    btnLayout->addWidget(m_skipBtn);
+
+    btnLayout->addSpacing(16);
+
+    m_cancelBtn = new QPushButton("Cancel", this);
+    m_cancelBtn->setFixedSize(140, 42);
     m_cancelBtn->setStyleSheet(
-        "QPushButton { background-color: #21262d; color: #f85149; font-size: 14px; font-weight: bold; border: 1px solid #30363d; border-radius: 6px; }"
+        "QPushButton { background-color: #21262d; color: #f85149; font-size: 13px; font-weight: bold; border: 1px solid #30363d; border-radius: 6px; }"
         "QPushButton:hover { background-color: #30363d; }"
     );
     connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
@@ -135,20 +149,48 @@ void CalibrationDialog::mousePressEvent(QMouseEvent *event)
 {
     if (m_currentStep >= m_targetPoints.size()) return;
 
+    // 1. Debounce: ignore touches faster than 300ms from previous accepted tap
+    if (m_tapDebounce.isValid() && m_tapDebounce.elapsed() < 300) {
+        return;
+    }
+
     QPoint rawPos = event->pos();
+    QPoint target = m_targetPoints[m_currentStep];
+
+    // 2. Proximity check: Must be within 85px of the bullseye target
+    int dx = rawPos.x() - target.x();
+    int dy = rawPos.y() - target.y();
+    double dist = std::sqrt(dx * dx + dy * dy);
+
+    if (dist > 85.0) {
+        qWarning() << "Calibration tap rejected: too far from target. Dist=" << dist
+                   << "Raw=" << rawPos << "Target=" << target;
+        m_statusLabel->setText(
+            QString("⚠️ Tap was too far from target (%1px away). Please tap directly on the crosshair.")
+                .arg(qRound(dist)));
+        m_statusLabel->setStyleSheet("font-size: 13px; color: #ffa726; font-weight: bold;");
+        return;
+    }
+
+    // 3. Clean hit within target radius!
     m_measuredPoints[m_currentStep] = rawPos;
+    m_tapDebounce.start();
 
     qDebug() << "Calibration Step" << m_currentStep
-             << "Target:" << m_targetPoints[m_currentStep]
-             << "Raw Measured:" << rawPos;
+             << "Target:" << target
+             << "Raw Measured:" << rawPos
+             << "Dist:" << dist;
 
     m_currentStep++;
 
     if (m_currentStep < m_targetPoints.size()) {
         m_instructionLabel->setText(
             QString("Tap the center of the crosshair (Point %1 of 4)").arg(m_currentStep + 1));
-        m_statusLabel->setText(QString("Recorded: (%1, %2)").arg(rawPos.x()).arg(rawPos.y()));
-        m_statusLabel->setStyleSheet("font-size: 13px; color: #4caf50;");
+        m_statusLabel->setText(QString("✓ Target %1 recorded at (%2, %3)")
+                                   .arg(m_currentStep)
+                                   .arg(rawPos.x())
+                                   .arg(rawPos.y()));
+        m_statusLabel->setStyleSheet("font-size: 13px; color: #00e676; font-weight: bold;");
         update();
     } else {
         m_pulseTimer->stop();
@@ -174,11 +216,17 @@ void CalibrationDialog::calculateAndFinish()
     double measured_dy_right = m_measuredPoints[2].y() - m_measuredPoints[1].y();
     double measured_dy = (measured_dy_left + measured_dy_right) / 2.0;
 
-    if (qAbs(measured_dx) < 150.0 || qAbs(measured_dy) < 100.0) {
-        m_instructionLabel->setText("Calibration Failed: Taps were too close together");
+    // Sanity check spans: must be within reasonable physical bounds
+    bool spanError = (qAbs(measured_dx_top - target_dx) > 100.0 ||
+                      qAbs(measured_dx_bot - target_dx) > 100.0 ||
+                      qAbs(measured_dy_left - target_dy) > 80.0 ||
+                      qAbs(measured_dy_right - target_dy) > 80.0);
+
+    if (spanError || qAbs(measured_dx) < 700.0 || qAbs(measured_dy) < 350.0) {
+        m_instructionLabel->setText("Calibration Inconsistent: Taps were distorted");
         m_instructionLabel->setStyleSheet("font-size: 16px; color: #f85149; font-weight: bold;");
-        m_statusLabel->setText("Please tap carefully on all four distant corners. Restarting...");
-        m_statusLabel->setStyleSheet("font-size: 13px; color: #ffa726;");
+        m_statusLabel->setText("Please tap carefully on all four crosshairs. Restarting...");
+        m_statusLabel->setStyleSheet("font-size: 13px; color: #ffa726; font-weight: bold;");
         m_currentStep = 0;
         m_pulseTimer->start(60);
         update();
@@ -198,7 +246,16 @@ void CalibrationDialog::calculateAndFinish()
     qDebug() << "Calibration Result: ScaleX=" << scale_x << "ScaleY=" << scale_y
              << "OffsetX=" << offset_x << "OffsetY=" << offset_y;
 
-    TouchCalibration::instance().setCalibration(scale_x, scale_y, offset_x, offset_y);
+    bool applied = TouchCalibration::instance().setCalibration(scale_x, scale_y, offset_x, offset_y);
+    if (!applied) {
+        m_instructionLabel->setText("Calibration Out-of-Bounds — Reverted to Safe 1:1");
+        m_instructionLabel->setStyleSheet("font-size: 16px; color: #ffa726; font-weight: bold;");
+        m_statusLabel->setText("Shifts exceeded safe physical limits (+-40px). Safe 1:1 default kept.");
+        m_statusLabel->setStyleSheet("font-size: 13px; color: #8b949e;");
+        TouchCalibration::instance().reset();
+        QTimer::singleShot(1800, this, &QDialog::accept);
+        return;
+    }
 
     m_instructionLabel->setText("Calibration Successful!");
     m_instructionLabel->setStyleSheet("font-size: 18px; color: #00e676; font-weight: bold;");
@@ -211,7 +268,17 @@ void CalibrationDialog::calculateAndFinish()
     m_statusLabel->setStyleSheet("font-size: 14px; color: #ffffff; font-weight: bold;");
 
     m_cancelBtn->setVisible(false);
+    if (m_skipBtn) m_skipBtn->setVisible(false);
     update();
 
     QTimer::singleShot(1400, this, &QDialog::accept);
 }
+
+void CalibrationDialog::onSkipClicked()
+{
+    TouchCalibration::instance().reset();
+    TouchCalibration::instance().save();
+    accept();
+}
+
+

@@ -22,7 +22,7 @@ public:
     QPointF map(const QPointF &p) const;
     QPoint map(const QPoint &p) const;
 
-    void setCalibration(double sx, double sy, double ox, double oy);
+    bool setCalibration(double sx, double sy, double ox, double oy);
     void reset();
     bool load(const QString &path = "/etc/touch-calibration.json");
     bool save(const QString &path = "/etc/touch-calibration.json");
