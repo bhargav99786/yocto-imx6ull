@@ -341,7 +341,6 @@ sound1 {
         goodix,irq-gpio = <&gpio5 1 GPIO_ACTIVE_LOW>;
         touchscreen-size-x = <1024>;
         touchscreen-size-y = <600>;
-        touchscreen-swapped-x-y;
         goodix,cfg-group0 = [
 		42 00 04 58 02 05 39 00 05 3F 19 
 		0F 82 64 03 05 00 00 00 00 00 00 
