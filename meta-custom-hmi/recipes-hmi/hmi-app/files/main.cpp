@@ -17,17 +17,17 @@ int main(int argc, char *argv[])
         qputenv("QT_QPA_PLATFORM", "linuxfb:fb=/dev/fb0");
     }
 
-    // 2. Configure evdevtouch with rotate=90:invertx for 1024x600 Goodix digitizer
+    // 2. Configure evdevtouch for 1024x600 Goodix digitizer (native 1:1 mapping)
     const char *touchDev = "/dev/input/touchscreen0";
     if (!QFile::exists(touchDev) && QFile::exists("/dev/input/event0")) {
         touchDev = "/dev/input/event0";
     }
     if (!qEnvironmentVariableIsSet("QT_QPA_GENERIC_PLUGINS")) {
-        QByteArray plugin = QByteArray("evdevtouch:") + touchDev + ":rotate=90:invertx";
+        QByteArray plugin = QByteArray("evdevtouch:") + touchDev;
         qputenv("QT_QPA_GENERIC_PLUGINS", plugin);
     }
     if (!qEnvironmentVariableIsSet("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS")) {
-        QByteArray param = QByteArray(touchDev) + ":rotate=90:invertx";
+        QByteArray param = QByteArray(touchDev);
         qputenv("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS", param);
     }
 

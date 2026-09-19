@@ -46,10 +46,10 @@ if [ ! -x "$APP_EXEC" ]; then
     APP_EXEC="/usr/bin/hmi-app"
 fi
 
-# Export Qt Platform & Generic Plugin configurations (with rotate=90:invertx for 1024x600 display)
+# Export Qt Platform & Generic Plugin configurations (native 1:1 for 1024x600 display)
 export QT_QPA_PLATFORM="$APP_PLATFORM"
-export QT_QPA_GENERIC_PLUGINS="${QT_QPA_GENERIC_PLUGINS:-evdevtouch:${TS_DEVICE}:rotate=90:invertx}"
-export QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS="${QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS:-${TS_DEVICE}:rotate=90:invertx}"
+export QT_QPA_GENERIC_PLUGINS="${QT_QPA_GENERIC_PLUGINS:-evdevtouch:${TS_DEVICE}}"
+export QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS="${QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS:-${TS_DEVICE}}"
 export QT_QPA_FB_NO_LIBINPUT=1
 
 # Ensure font directories are accessible to Qt QBasicFontDatabase
