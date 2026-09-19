@@ -179,6 +179,11 @@ bool TouchCalibrationFilter::eventFilter(QObject *watched, QEvent *event)
         }
         if (!activeWin) return QObject::eventFilter(watched, event);
 
+        // Do not alter touch events inside the CalibrationDialog itself
+        if (activeWin->objectName() == "CalibrationDialog") {
+            return QObject::eventFilter(watched, event);
+        }
+
         // Find the specific widget at the calibrated coordinate
         QWidget *target = activeWin->childAt(calWindowPos.toPoint());
         if (!target) target = activeWin;

@@ -13,6 +13,8 @@ CalibrationDialog::CalibrationDialog(QWidget *parent)
       m_pulsePhase(0)
 {
     m_tapDebounce.invalidate();
+    setObjectName("CalibrationDialog");
+    TouchCalibration::instance().reset(); // ensure raw unshifted taps during wizard
     setFixedSize(1024, 600);
     setStyleSheet("background-color: #0a0e14;");
 
