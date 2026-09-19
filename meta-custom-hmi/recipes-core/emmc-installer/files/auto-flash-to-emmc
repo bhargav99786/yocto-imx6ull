@@ -164,12 +164,21 @@ mount $SD_BOOT_PART /mnt/sd_boot 2>/dev/null || true
 
 EMMC_NAME=$(basename $EMMC_DEV)
 if [ -f /mnt/sd_boot/u-boot.imx ]; then
-    echo "  Flashing u-boot.imx to eMMC boot0 hardware partition..."
+    echo "  Flashing u-boot.imx from boot partition..."
     echo 0 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
     dd if=/mnt/sd_boot/u-boot.imx of=/dev/${EMMC_NAME}boot0 bs=1K seek=1 conv=fsync status=none 2>/dev/null || true
     echo 1 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
-    echo "  Flashing u-boot.imx to eMMC raw (offset 1KB)..."
     dd if=/mnt/sd_boot/u-boot.imx of=$EMMC_DEV bs=1K seek=1 conv=fsync status=none
+else
+    echo "  Notice: /mnt/sd_boot/u-boot.imx not found, copying raw bootloader from $CURRENT_ROOT_DISK..."
+    echo 0 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
+    dd if=$CURRENT_ROOT_DISK of=/dev/${EMMC_NAME}boot0 bs=1K skip=1 seek=1 count=1023 conv=fsync status=none 2>/dev/null || true
+    echo 1 > /sys/block/${EMMC_NAME}boot0/force_ro 2>/dev/null || true
+    dd if=$CURRENT_ROOT_DISK of=$EMMC_DEV bs=1K skip=1 seek=1 count=1023 conv=fsync status=none
+fi
+# Configure eMMC hardware partition boot bus / bootpart enable if mmc tool is present
+if which mmc >/dev/null 2>&1; then
+    mmc bootpart enable 1 1 $EMMC_DEV 2>/dev/null || true
 fi
 
 umount /mnt/sd_boot 2>/dev/null || true
