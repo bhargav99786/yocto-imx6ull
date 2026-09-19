@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QTabBar>
 #include <QDateTime>
 #include <QFile>
 #include <QTextStream>
@@ -92,16 +93,17 @@ void MainWindow::setupUi()
     m_tabWidget = new QTabWidget(this);
     m_tabWidget->setStyleSheet(
         "QTabWidget::pane { border: 1px solid #233242; background: #111822; border-radius: 8px; }"
-        "QTabBar::tab { background: #16202c; color: #8b949e; padding: 12px 24px; font-size: 15px; font-weight: bold; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 4px; }"
+        "QTabBar::tab { background: #16202c; color: #8b949e; padding: 9px 16px; font-size: 13px; font-weight: bold; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 3px; }"
         "QTabBar::tab:selected { background: #1f2d3d; color: #00d2ff; border-bottom: 3px solid #00d2ff; }"
         "QTabBar::tab:hover { background: #1b2636; color: #e6edf3; }"
     );
+    m_tabWidget->tabBar()->setExpanding(true);
 
-    m_tabWidget->addTab(createDashboardTab(), "System Dashboard");
-    m_tabWidget->addTab(createTouchTestTab(), "Touch Screen Test");
-    m_tabWidget->addTab(createHardwareControlTab(), "Hardware & Display");
-    m_tabWidget->addTab(createNetworkOtaTab(), "Network & OTA");
-    m_tabWidget->addTab(createSystemTab(), "System & Power");
+    m_tabWidget->addTab(createDashboardTab(), "Dashboard");
+    m_tabWidget->addTab(createTouchTestTab(), "Touch Test");
+    m_tabWidget->addTab(createHardwareControlTab(), "Hardware && Display");
+    m_tabWidget->addTab(createNetworkOtaTab(), "Network && OTA");
+    m_tabWidget->addTab(createSystemTab(), "System && Power");
 
     mainLayout->addWidget(m_tabWidget);
 }
@@ -110,59 +112,54 @@ QWidget *MainWindow::createDashboardTab()
 {
     QWidget *tab = new QWidget(this);
     QGridLayout *grid = new QGridLayout(tab);
-    grid->setContentsMargins(16, 16, 16, 16);
-    grid->setSpacing(16);
+    grid->setContentsMargins(12, 10, 12, 10);
+    grid->setSpacing(10);
 
-    auto makeCard = [](const QString &title, const QString &text, const QString &accentCol) -> QGroupBox* {
+    auto makeCard = [](const QString &title, const QString &accentCol) -> QGroupBox* {
         QGroupBox *box = new QGroupBox(title);
         box->setStyleSheet(QString(
-            "QGroupBox { font-size: 14px; font-weight: bold; color: %1; border: 1px solid #233242; border-radius: 8px; margin-top: 8px; padding-top: 14px; background-color: #141c26; }"
-            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; }"
+            "QGroupBox { font-size: 13px; font-weight: bold; color: %1; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 12px 10px 10px 10px; background-color: #141c26; }"
+            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
         ).arg(accentCol));
         QVBoxLayout *l = new QVBoxLayout(box);
-        QLabel *lbl = new QLabel(text, box);
-        lbl->setStyleSheet("font-size: 15px; color: #c9d1d9; font-weight: normal;");
-        lbl->setWordWrap(true);
-        l->addWidget(lbl);
+        l->setContentsMargins(10, 10, 10, 8);
+        l->setSpacing(6);
+        l->setAlignment(Qt::AlignTop);
         return box;
     };
 
-    m_cpuModelLabel = new QLabel("ARM Cortex-A7 @ 528 MHz\nNXP i.MX6ULL Processor", tab);
-    m_cpuModelLabel->setStyleSheet("font-size: 14px; color: #e6edf3;");
+    m_cpuModelLabel = new QLabel("ARM Cortex-A7 @ 528 MHz\nNXP i.MX6ULL Processor\nSingle Core 32-bit Architecture", tab);
+    m_cpuModelLabel->setStyleSheet("font-size: 13px; color: #e6edf3; line-height: 1.4;");
 
-    m_kernelLabel = new QLabel("Linux 6.1.57-fslc\nYocto Kirkstone (Poky 4.0)", tab);
-    m_kernelLabel->setStyleSheet("font-size: 14px; color: #e6edf3;");
+    m_kernelLabel = new QLabel("Linux 6.1.57-fslc (Preempt)\nYocto Kirkstone 4.0 LTS\nRootFS: systemd 250", tab);
+    m_kernelLabel->setStyleSheet("font-size: 13px; color: #e6edf3; line-height: 1.4;");
 
     m_uptimeLabel = new QLabel("Uptime: --", tab);
-    m_uptimeLabel->setStyleSheet("font-size: 15px; color: #00d2ff; font-weight: bold;");
+    m_uptimeLabel->setStyleSheet("font-size: 16px; color: #00d2ff; font-weight: bold;");
 
-    QGroupBox *boxCpu = makeCard("Processor & Architecture", "", "#00d2ff");
+    QGroupBox *boxCpu = makeCard("Processor && Architecture", "#00d2ff");
     boxCpu->layout()->addWidget(m_cpuModelLabel);
 
-    QGroupBox *boxOs = makeCard("Operating System & Kernel", "", "#4caf50");
+    QGroupBox *boxOs = makeCard("Operating System && Kernel", "#4caf50");
     boxOs->layout()->addWidget(m_kernelLabel);
 
-    QGroupBox *boxUptime = makeCard("System Uptime", "", "#ff9800");
+    QGroupBox *boxUptime = makeCard("System Uptime", "#ff9800");
     boxUptime->layout()->addWidget(m_uptimeLabel);
 
     // RAM Card
-    QGroupBox *boxRam = new QGroupBox("Memory (RAM) Utilization", tab);
-    boxRam->setStyleSheet(
-        "QGroupBox { font-size: 14px; font-weight: bold; color: #e040fb; border: 1px solid #233242; border-radius: 8px; margin-top: 8px; padding-top: 14px; background-color: #141c26; }"
-        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; }"
-    );
-    QVBoxLayout *ramLayout = new QVBoxLayout(boxRam);
+    QGroupBox *boxRam = makeCard("Memory (RAM) Utilization", "#e040fb");
+    QVBoxLayout *ramLayout = static_cast<QVBoxLayout*>(boxRam->layout());
     m_ramBar = new QProgressBar(boxRam);
     m_ramBar->setRange(0, 100);
     m_ramBar->setValue(25);
-    m_ramBar->setFixedHeight(24);
+    m_ramBar->setFixedHeight(22);
     m_ramBar->setTextVisible(false);
     m_ramBar->setStyleSheet(
         "QProgressBar { background-color: #1c2633; border: 1px solid #2a3b4c; border-radius: 4px; }"
         "QProgressBar::chunk { background-color: #e040fb; border-radius: 4px; }"
     );
     m_ramTextLabel = new QLabel("RAM: -- / -- MB", boxRam);
-    m_ramTextLabel->setStyleSheet("font-size: 13px; color: #c9d1d9;");
+    m_ramTextLabel->setStyleSheet("font-size: 13px; color: #c9d1d9; font-weight: bold;");
     ramLayout->addWidget(m_ramBar);
     ramLayout->addWidget(m_ramTextLabel);
 
@@ -183,22 +180,31 @@ QWidget *MainWindow::createTouchTestTab()
 
     // Left sidebar with touch tools
     QFrame *toolsPanel = new QFrame(tab);
-    toolsPanel->setFixedWidth(180);
+    toolsPanel->setFixedWidth(190);
     toolsPanel->setStyleSheet("background-color: #141c26; border: 1px solid #233242; border-radius: 8px; padding: 6px;");
     QVBoxLayout *vTools = new QVBoxLayout(toolsPanel);
-    vTools->setSpacing(10);
+    vTools->setContentsMargins(8, 8, 8, 8);
+    vTools->setSpacing(8);
 
     QLabel *toolTitle = new QLabel("Color Palette", toolsPanel);
-    toolTitle->setStyleSheet("font-size: 14px; font-weight: bold; color: #00d2ff;");
+    toolTitle->setStyleSheet("font-size: 13px; font-weight: bold; color: #00d2ff;");
     vTools->addWidget(toolTitle);
 
-    auto makeColorBtn = [this, vTools, toolsPanel](const QString &name, const QColor &c) {
-        QPushButton *btn = new QPushButton(name, toolsPanel);
-        btn->setFixedHeight(38);
-        btn->setStyleSheet(QString("background-color: %1; color: %2; font-weight: bold; border-radius: 6px; font-size: 13px;")
-            .arg(c.name()).arg(c.lightness() > 150 ? "#000000" : "#ffffff"));
+    QHBoxLayout *colorRow = new QHBoxLayout();
+    colorRow->setSpacing(6);
+    colorRow->setContentsMargins(0, 0, 0, 0);
+
+    auto makeColorBtn = [this, colorRow, toolsPanel](const QString &tip, const QColor &c) {
+        QPushButton *btn = new QPushButton(toolsPanel);
+        btn->setFixedSize(30, 30);
+        btn->setToolTip(tip);
+        btn->setStyleSheet(QString(
+            "QPushButton { background-color: %1; border: 2px solid #233242; border-radius: 15px; }"
+            "QPushButton:hover { border-color: #ffffff; }"
+            "QPushButton:pressed { border-color: #00d2ff; }"
+        ).arg(c.name()));
         connect(btn, &QPushButton::clicked, this, [this, c]() { onColorButtonClicked(c); });
-        vTools->addWidget(btn);
+        colorRow->addWidget(btn);
     };
 
     makeColorBtn("Cyan", QColor(0, 220, 255));
@@ -206,31 +212,30 @@ QWidget *MainWindow::createTouchTestTab()
     makeColorBtn("Green", QColor(76, 175, 80));
     makeColorBtn("Red", QColor(244, 67, 54));
     makeColorBtn("White", QColor(240, 244, 248));
-
-    vTools->addSpacing(6);
+    vTools->addLayout(colorRow);
 
     QPushButton *clearBtn = new QPushButton("Clear Canvas", toolsPanel);
-    clearBtn->setFixedHeight(36);
-    clearBtn->setStyleSheet("background-color: #2e3846; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px; border: 1px solid #455a64;");
+    clearBtn->setFixedHeight(32);
+    clearBtn->setStyleSheet("background-color: #2e3846; color: #ffffff; font-size: 12px; font-weight: bold; border-radius: 6px; border: 1px solid #455a64;");
     connect(clearBtn, &QPushButton::clicked, this, [this]() {
         if (m_canvas) m_canvas->clearCanvas();
     });
     vTools->addWidget(clearBtn);
 
-    vTools->addSpacing(8);
+    vTools->addSpacing(4);
 
     QLabel *calibTitle = new QLabel("Touch Calibration", toolsPanel);
     calibTitle->setStyleSheet("font-size: 13px; font-weight: bold; color: #ff9800;");
     vTools->addWidget(calibTitle);
 
     m_calibrateBtn = new QPushButton("Calibrate Screen", toolsPanel);
-    m_calibrateBtn->setFixedHeight(40);
-    m_calibrateBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
+    m_calibrateBtn->setFixedHeight(34);
+    m_calibrateBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-size: 12px; font-weight: bold; border-radius: 6px;");
     connect(m_calibrateBtn, &QPushButton::clicked, this, &MainWindow::onCalibrateTouchClicked);
     vTools->addWidget(m_calibrateBtn);
 
     m_resetCalibrationBtn = new QPushButton("Reset to 1:1", toolsPanel);
-    m_resetCalibrationBtn->setFixedHeight(30);
+    m_resetCalibrationBtn->setFixedHeight(28);
     m_resetCalibrationBtn->setStyleSheet("background-color: #21262d; color: #8b949e; font-size: 11px; border-radius: 4px; border: 1px solid #30363d;");
     connect(m_resetCalibrationBtn, &QPushButton::clicked, this, &MainWindow::onResetCalibrationClicked);
     vTools->addWidget(m_resetCalibrationBtn);
@@ -244,8 +249,9 @@ QWidget *MainWindow::createTouchTestTab()
 
     vTools->addStretch();
 
-    m_touchCoordLabel = new QLabel("X: --\nY: --", toolsPanel);
-    m_touchCoordLabel->setStyleSheet("background: #0d1117; color: #00d2ff; font-family: monospace; font-size: 14px; font-weight: bold; padding: 8px; border-radius: 6px; border: 1px solid #233242;");
+    m_touchCoordLabel = new QLabel("Touch: Ready\nX: --  Y: --", toolsPanel);
+    m_touchCoordLabel->setFixedHeight(44);
+    m_touchCoordLabel->setStyleSheet("background: #0d1117; color: #00d2ff; font-family: monospace; font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 6px; border: 1px solid #233242;");
     vTools->addWidget(m_touchCoordLabel);
 
     // Right Canvas
@@ -262,16 +268,22 @@ QWidget *MainWindow::createHardwareControlTab()
 {
     QWidget *tab = new QWidget(this);
     QGridLayout *grid = new QGridLayout(tab);
-    grid->setContentsMargins(20, 20, 20, 20);
-    grid->setSpacing(20);
+    grid->setContentsMargins(16, 16, 16, 16);
+    grid->setSpacing(16);
 
     // Backlight Box
     QGroupBox *blBox = new QGroupBox("LCD Backlight Intensity", tab);
     blBox->setStyleSheet(
-        "QGroupBox { font-size: 15px; font-weight: bold; color: #00d2ff; border: 1px solid #233242; border-radius: 8px; margin-top: 8px; padding-top: 16px; background-color: #141c26; }"
-        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; }"
+        "QGroupBox { font-size: 14px; font-weight: bold; color: #00d2ff; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 14px 12px 12px 12px; background-color: #141c26; }"
+        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
     );
     QVBoxLayout *blLayout = new QVBoxLayout(blBox);
+    blLayout->setAlignment(Qt::AlignTop);
+    blLayout->setSpacing(12);
+
+    m_brightnessValueLabel = new QLabel("Brightness: 7 / 7 (100%)", blBox);
+    m_brightnessValueLabel->setStyleSheet("font-size: 15px; color: #ffffff; font-weight: bold;");
+    blLayout->addWidget(m_brightnessValueLabel);
 
     m_brightnessSlider = new QSlider(Qt::Horizontal, blBox);
     m_brightnessSlider->setRange(1, 7);
@@ -283,35 +295,56 @@ QWidget *MainWindow::createHardwareControlTab()
         "QSlider::handle:horizontal { background: #ffffff; width: 28px; margin-top: -9px; margin-bottom: -9px; border-radius: 14px; border: 2px solid #00d2ff; }"
     );
     connect(m_brightnessSlider, &QSlider::valueChanged, this, &MainWindow::onBrightnessChanged);
-
-    m_brightnessValueLabel = new QLabel("Brightness: 7 / 7 (100%)", blBox);
-    m_brightnessValueLabel->setStyleSheet("font-size: 14px; color: #e6edf3; font-weight: bold;");
-
-    blLayout->addWidget(m_brightnessValueLabel);
     blLayout->addWidget(m_brightnessSlider);
 
+    // Quick presets
+    QHBoxLayout *presetRow = new QHBoxLayout();
+    presetRow->setSpacing(8);
+    auto makePreset = [this, presetRow, blBox](const QString &label, int val) {
+        QPushButton *btn = new QPushButton(label, blBox);
+        btn->setFixedHeight(34);
+        btn->setStyleSheet("background-color: #1f2d3d; color: #00d2ff; font-weight: bold; font-size: 12px; border: 1px solid #2a3b4c; border-radius: 6px;");
+        connect(btn, &QPushButton::clicked, [this, val]() {
+            m_brightnessSlider->setValue(val);
+        });
+        presetRow->addWidget(btn);
+    };
+    makePreset("25%", 2);
+    makePreset("50%", 4);
+    makePreset("75%", 5);
+    makePreset("Max (100%)", 7);
+    blLayout->addLayout(presetRow);
+    blLayout->addStretch();
+
     // GPIO & LED Box
-    QGroupBox *gpioBox = new QGroupBox("Industrial I/O & Relay Simulation", tab);
+    QGroupBox *gpioBox = new QGroupBox("Industrial I/O && Relay Simulation", tab);
     gpioBox->setStyleSheet(
-        "QGroupBox { font-size: 15px; font-weight: bold; color: #4caf50; border: 1px solid #233242; border-radius: 8px; margin-top: 8px; padding-top: 16px; background-color: #141c26; }"
-        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; }"
+        "QGroupBox { font-size: 14px; font-weight: bold; color: #4caf50; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 14px 12px 12px 12px; background-color: #141c26; }"
+        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
     );
     QVBoxLayout *gpioLayout = new QVBoxLayout(gpioBox);
+    gpioLayout->setAlignment(Qt::AlignTop);
+    gpioLayout->setSpacing(14);
+
+    QLabel *gpioDesc = new QLabel("Simulated Digital Output (Relay / Onboard LED)", gpioBox);
+    gpioDesc->setStyleSheet("font-size: 13px; color: #8b949e;");
+    gpioLayout->addWidget(gpioDesc);
 
     m_ledToggleBtn = new QPushButton("Carrier Board LED / Relay: OFF", gpioBox);
     m_ledToggleBtn->setFixedHeight(50);
-    m_ledToggleBtn->setStyleSheet("background-color: #21262d; color: #8b949e; font-size: 15px; font-weight: bold; border-radius: 8px; border: 2px solid #30363d;");
+    m_ledToggleBtn->setStyleSheet("background-color: #21262d; color: #8b949e; font-size: 14px; font-weight: bold; border-radius: 8px; border: 2px solid #30363d;");
     connect(m_ledToggleBtn, &QPushButton::clicked, this, [this]() {
         m_ledState = !m_ledState;
         if (m_ledState) {
             m_ledToggleBtn->setText("Carrier Board LED / Relay: ON");
-            m_ledToggleBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-size: 15px; font-weight: bold; border-radius: 8px; border: 2px solid #4caf50;");
+            m_ledToggleBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 8px; border: 2px solid #4caf50;");
         } else {
             m_ledToggleBtn->setText("Carrier Board LED / Relay: OFF");
-            m_ledToggleBtn->setStyleSheet("background-color: #21262d; color: #8b949e; font-size: 15px; font-weight: bold; border-radius: 8px; border: 2px solid #30363d;");
+            m_ledToggleBtn->setStyleSheet("background-color: #21262d; color: #8b949e; font-size: 14px; font-weight: bold; border-radius: 8px; border: 2px solid #30363d;");
         }
     });
     gpioLayout->addWidget(m_ledToggleBtn);
+    gpioLayout->addStretch();
 
     grid->addWidget(blBox, 0, 0);
     grid->addWidget(gpioBox, 0, 1);
@@ -323,30 +356,40 @@ QWidget *MainWindow::createSystemTab()
 {
     QWidget *tab = new QWidget(this);
     QVBoxLayout *vLayout = new QVBoxLayout(tab);
-    vLayout->setContentsMargins(24, 24, 24, 24);
-    vLayout->setSpacing(20);
+    vLayout->setContentsMargins(16, 16, 16, 16);
+    vLayout->setSpacing(16);
 
-    QLabel *desc = new QLabel("System Power & Maintenance", tab);
-    desc->setStyleSheet("font-size: 18px; font-weight: bold; color: #00d2ff;");
-    vLayout->addWidget(desc);
+    QGroupBox *powerBox = new QGroupBox("System Power && Maintenance", tab);
+    powerBox->setStyleSheet(
+        "QGroupBox { font-size: 14px; font-weight: bold; color: #00d2ff; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 16px; background-color: #141c26; }"
+        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
+    );
+    QVBoxLayout *boxLayout = new QVBoxLayout(powerBox);
+    boxLayout->setSpacing(16);
+    boxLayout->setContentsMargins(12, 12, 12, 12);
+
+    QLabel *desc = new QLabel("Select an industrial system control action below:", powerBox);
+    desc->setStyleSheet("font-size: 13px; color: #8b949e;");
+    boxLayout->addWidget(desc);
 
     QHBoxLayout *btnLayout = new QHBoxLayout();
-    btnLayout->setSpacing(24);
+    btnLayout->setSpacing(20);
 
-    QPushButton *rebootBtn = new QPushButton("Restart System (Reboot)", tab);
-    rebootBtn->setFixedHeight(55);
-    rebootBtn->setStyleSheet("background-color: #f57c00; color: #ffffff; font-size: 16px; font-weight: bold; border-radius: 8px;");
+    QPushButton *rebootBtn = new QPushButton("Restart System (Reboot)", powerBox);
+    rebootBtn->setFixedHeight(48);
+    rebootBtn->setStyleSheet("background-color: #f57c00; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
     connect(rebootBtn, &QPushButton::clicked, this, &MainWindow::onRebootClicked);
 
-    QPushButton *shutdownBtn = new QPushButton("Power Off (Shutdown)", tab);
-    shutdownBtn->setFixedHeight(55);
-    shutdownBtn->setStyleSheet("background-color: #d32f2f; color: #ffffff; font-size: 16px; font-weight: bold; border-radius: 8px;");
+    QPushButton *shutdownBtn = new QPushButton("Power Off (Shutdown)", powerBox);
+    shutdownBtn->setFixedHeight(48);
+    shutdownBtn->setStyleSheet("background-color: #d32f2f; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
     connect(shutdownBtn, &QPushButton::clicked, this, &MainWindow::onShutdownClicked);
 
     btnLayout->addWidget(rebootBtn);
     btnLayout->addWidget(shutdownBtn);
+    boxLayout->addLayout(btnLayout);
 
-    vLayout->addLayout(btnLayout);
+    vLayout->addWidget(powerBox);
     vLayout->addStretch();
 
     return tab;
@@ -383,8 +426,8 @@ void MainWindow::updateClockAndStats()
 
 void MainWindow::onTouchCoordinates(int x, int y, bool isDown)
 {
-    m_touchCoordLabel->setText(QString("Touch:\nX: %1\nY: %2\nState: %3")
-        .arg(x).arg(y).arg(isDown ? "DOWN" : "UP"));
+    m_touchCoordLabel->setText(QString("X: %1  Y: %2\nStatus: %3")
+        .arg(x, 4).arg(y, 4).arg(isDown ? "TOUCH" : "RELEASE"));
 }
 
 void MainWindow::onBrightnessChanged(int value)
@@ -497,14 +540,14 @@ QWidget *MainWindow::createNetworkOtaTab()
 {
     QWidget *tab = new QWidget(this);
     QHBoxLayout *mainHLayout = new QHBoxLayout(tab);
-    mainHLayout->setContentsMargins(14, 12, 14, 12);
-    mainHLayout->setSpacing(14);
+    mainHLayout->setContentsMargins(12, 10, 12, 10);
+    mainHLayout->setSpacing(12);
 
     auto makeCard = [](const QString &title, const QString &accentCol) -> QGroupBox* {
         QGroupBox *box = new QGroupBox(title);
         box->setStyleSheet(QString(
-            "QGroupBox { font-size: 14px; font-weight: bold; color: %1; border: 1px solid #233242; border-radius: 8px; margin-top: 8px; padding-top: 14px; background-color: #141c26; }"
-            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; }"
+            "QGroupBox { font-size: 13px; font-weight: bold; color: %1; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 12px 10px 10px 10px; background-color: #141c26; }"
+            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
         ).arg(accentCol));
         return box;
     };
@@ -516,24 +559,25 @@ QWidget *MainWindow::createNetworkOtaTab()
     // 1. Ethernet Status Card
     QGroupBox *ethBox = makeCard("Ethernet Interfaces (eth0 / eth1)", "#00d2ff");
     QVBoxLayout *ethLayout = new QVBoxLayout(ethBox);
-    ethLayout->setSpacing(8);
+    ethLayout->setSpacing(6);
+    ethLayout->setContentsMargins(8, 8, 8, 8);
 
     m_eth0StatusLabel = new QLabel("eth0: Checking...", ethBox);
-    m_eth0StatusLabel->setStyleSheet("font-size: 13px; color: #ffffff; font-family: monospace;");
+    m_eth0StatusLabel->setStyleSheet("font-size: 12px; color: #ffffff; font-family: monospace;");
     ethLayout->addWidget(m_eth0StatusLabel);
 
     m_eth1StatusLabel = new QLabel("eth1: Checking...", ethBox);
-    m_eth1StatusLabel->setStyleSheet("font-size: 13px; color: #ffffff; font-family: monospace;");
+    m_eth1StatusLabel->setStyleSheet("font-size: 12px; color: #ffffff; font-family: monospace;");
     ethLayout->addWidget(m_eth1StatusLabel);
 
     QHBoxLayout *dhcpBtnLayout = new QHBoxLayout();
     m_renewDhcpBtn = new QPushButton("Renew Auto-IP (DHCP)", ethBox);
-    m_renewDhcpBtn->setFixedHeight(40);
-    m_renewDhcpBtn->setStyleSheet("background-color: #0288d1; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
+    m_renewDhcpBtn->setFixedHeight(34);
+    m_renewDhcpBtn->setStyleSheet("background-color: #0288d1; color: #ffffff; font-size: 12px; font-weight: bold; border-radius: 6px;");
     connect(m_renewDhcpBtn, &QPushButton::clicked, this, &MainWindow::onRenewDhcp);
 
     m_dhcpStatusLabel = new QLabel("DHCP: Ready", ethBox);
-    m_dhcpStatusLabel->setStyleSheet("font-size: 12px; color: #81c784;");
+    m_dhcpStatusLabel->setStyleSheet("font-size: 11px; color: #81c784;");
 
     dhcpBtnLayout->addWidget(m_renewDhcpBtn);
     dhcpBtnLayout->addWidget(m_dhcpStatusLabel);
@@ -543,16 +587,17 @@ QWidget *MainWindow::createNetworkOtaTab()
     // 2. Ping Test Card
     QGroupBox *pingBox = makeCard("Network Connectivity Test (Ping)", "#4caf50");
     QVBoxLayout *pingLayout = new QVBoxLayout(pingBox);
-    pingLayout->setSpacing(8);
+    pingLayout->setSpacing(6);
+    pingLayout->setContentsMargins(8, 8, 8, 8);
 
     QHBoxLayout *targetLayout = new QHBoxLayout();
     m_pingTargetEdit = new QLineEdit("192.168.1.1", pingBox);
-    m_pingTargetEdit->setFixedHeight(38);
+    m_pingTargetEdit->setFixedHeight(34);
     m_pingTargetEdit->setReadOnly(true);
-    m_pingTargetEdit->setStyleSheet("background-color: #1a2432; color: #ffffff; font-size: 14px; font-weight: bold; padding: 0 8px; border: 1px solid #334d66; border-radius: 6px;");
+    m_pingTargetEdit->setStyleSheet("background-color: #1a2432; color: #ffffff; font-size: 13px; font-weight: bold; padding: 0 8px; border: 1px solid #334d66; border-radius: 6px;");
 
-    QPushButton *editTargetBtn = new QPushButton("Touch to Edit", pingBox);
-    editTargetBtn->setFixedHeight(38);
+    QPushButton *editTargetBtn = new QPushButton("Edit Target", pingBox);
+    editTargetBtn->setFixedHeight(34);
     editTargetBtn->setStyleSheet("background-color: #263238; color: #00d2ff; font-size: 12px; font-weight: bold; border-radius: 6px; padding: 0 10px;");
     connect(editTargetBtn, &QPushButton::clicked, this, &MainWindow::onEditPingTarget);
 
@@ -565,8 +610,8 @@ QWidget *MainWindow::createNetworkOtaTab()
     presetsLayout->setSpacing(6);
     auto addPreset = [this, presetsLayout, pingBox](const QString &name, const QString &ip) {
         QPushButton *b = new QPushButton(name, pingBox);
-        b->setFixedHeight(30);
-        b->setStyleSheet("background-color: #1f2d3d; color: #90caf9; font-size: 11px; border-radius: 4px;");
+        b->setFixedHeight(28);
+        b->setStyleSheet("background-color: #1f2d3d; color: #90caf9; font-size: 11px; border-radius: 4px; border: 1px solid #2a3b4c;");
         connect(b, &QPushButton::clicked, [this, ip]() {
             m_pingTargetEdit->setText(ip);
         });
@@ -578,81 +623,79 @@ QWidget *MainWindow::createNetworkOtaTab()
     pingLayout->addLayout(presetsLayout);
 
     m_runPingBtn = new QPushButton("Run Ping Test", pingBox);
-    m_runPingBtn->setFixedHeight(42);
-    m_runPingBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+    m_runPingBtn->setFixedHeight(36);
+    m_runPingBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
     connect(m_runPingBtn, &QPushButton::clicked, this, &MainWindow::onRunPing);
     pingLayout->addWidget(m_runPingBtn);
 
     m_pingResultLabel = new QLabel("Result: Ready to test", pingBox);
-    m_pingResultLabel->setFixedHeight(38);
+    m_pingResultLabel->setFixedHeight(32);
     m_pingResultLabel->setStyleSheet("background-color: #0d131a; color: #b0bec5; font-size: 12px; font-family: monospace; border: 1px solid #1e2c3c; border-radius: 4px; padding: 4px;");
     pingLayout->addWidget(m_pingResultLabel);
 
     leftCol->addWidget(pingBox);
+    leftCol->addStretch();
     mainHLayout->addLayout(leftCol, 1);
 
     // ================= RIGHT COLUMN: OTA & DUAL-BANK =================
     QVBoxLayout *rightCol = new QVBoxLayout();
     rightCol->setSpacing(10);
 
-    // 3. OTA System & Dual-Bank Card
-    QGroupBox *otaInfoBox = makeCard("System Version & Dual-Bank Status", "#ab47bc");
+    // 3. Combined System Version & Server Card
+    QGroupBox *otaInfoBox = makeCard("System Firmware && Server Configuration", "#ab47bc");
     QVBoxLayout *otaInfoLayout = new QVBoxLayout(otaInfoBox);
-    otaInfoLayout->setSpacing(8);
+    otaInfoLayout->setSpacing(6);
+    otaInfoLayout->setContentsMargins(8, 8, 8, 8);
 
-    m_otaVersionLabel = new QLabel(QString("Installed Version: %1").arg(getInstalledOtaVersion()), otaInfoBox);
-    m_otaVersionLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: #e1bee7;");
-    otaInfoLayout->addWidget(m_otaVersionLabel);
+    QHBoxLayout *verRow = new QHBoxLayout();
+    m_otaVersionLabel = new QLabel(QString("Version: %1").arg(getInstalledOtaVersion()), otaInfoBox);
+    m_otaVersionLabel->setStyleSheet("font-size: 13px; font-weight: bold; color: #e1bee7;");
+    m_otaBankLabel = new QLabel(QString("RootFS: %1").arg(getActiveBootBank()), otaInfoBox);
+    m_otaBankLabel->setStyleSheet("font-size: 13px; color: #ce93d8; font-weight: bold;");
+    verRow->addWidget(m_otaVersionLabel);
+    verRow->addWidget(m_otaBankLabel);
+    otaInfoLayout->addLayout(verRow);
 
-    m_otaBankLabel = new QLabel(QString("Active RootFS: %1").arg(getActiveBootBank()), otaInfoBox);
-    m_otaBankLabel->setStyleSheet("font-size: 13px; color: #ce93d8;");
-    otaInfoLayout->addWidget(m_otaBankLabel);
+    QHBoxLayout *serverRow = new QHBoxLayout();
+    m_otaServerLabel = new QLabel(QString("Server: %1").arg(m_otaServerUrl), otaInfoBox);
+    m_otaServerLabel->setStyleSheet("font-size: 12px; color: #ffe0b2; font-family: monospace;");
+    QPushButton *editServerBtn = new QPushButton("Edit Server", otaInfoBox);
+    editServerBtn->setFixedHeight(32);
+    editServerBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-size: 12px; font-weight: bold; border-radius: 6px; padding: 0 10px;");
+    connect(editServerBtn, &QPushButton::clicked, this, &MainWindow::onEditServerClicked);
+    serverRow->addWidget(m_otaServerLabel, 1);
+    serverRow->addWidget(editServerBtn);
+    otaInfoLayout->addLayout(serverRow);
 
     rightCol->addWidget(otaInfoBox);
 
-    // 4. OTA Server Configuration Card
-    QGroupBox *serverBox = makeCard("OTA Server Endpoint", "#ff9800");
-    QVBoxLayout *serverLayout = new QVBoxLayout(serverBox);
-    serverLayout->setSpacing(8);
-
-    m_otaServerLabel = new QLabel(QString("Server: %1").arg(m_otaServerUrl), serverBox);
-    m_otaServerLabel->setStyleSheet("font-size: 13px; color: #ffe0b2; font-family: monospace;");
-    m_otaServerLabel->setWordWrap(true);
-    serverLayout->addWidget(m_otaServerLabel);
-
-    QPushButton *editServerBtn = new QPushButton("Edit Server URL", serverBox);
-    editServerBtn->setFixedHeight(40);
-    editServerBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
-    connect(editServerBtn, &QPushButton::clicked, this, &MainWindow::onEditServerClicked);
-    serverLayout->addWidget(editServerBtn);
-
-    rightCol->addWidget(serverBox);
-
-    // 5. Update Checker & Action Card
+    // 4. Update Checker & Action Card
     QGroupBox *updateBox = makeCard("Firmware Update Management", "#00e676");
     QVBoxLayout *updateLayout = new QVBoxLayout(updateBox);
     updateLayout->setSpacing(8);
+    updateLayout->setContentsMargins(8, 8, 8, 8);
 
     m_checkUpdateBtn = new QPushButton("Check for Update", updateBox);
-    m_checkUpdateBtn->setFixedHeight(42);
-    m_checkUpdateBtn->setStyleSheet("background-color: #00897b; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+    m_checkUpdateBtn->setFixedHeight(36);
+    m_checkUpdateBtn->setStyleSheet("background-color: #00897b; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
     connect(m_checkUpdateBtn, &QPushButton::clicked, this, &MainWindow::onCheckOtaUpdate);
     updateLayout->addWidget(m_checkUpdateBtn);
 
     m_installUpdateBtn = new QPushButton("Install Update Now", updateBox);
-    m_installUpdateBtn->setFixedHeight(42);
-    m_installUpdateBtn->setStyleSheet("background-color: #00c853; color: #ffffff; font-size: 14px; font-weight: bold; border-radius: 6px;");
+    m_installUpdateBtn->setFixedHeight(36);
+    m_installUpdateBtn->setStyleSheet("background-color: #00c853; color: #ffffff; font-size: 13px; font-weight: bold; border-radius: 6px;");
     m_installUpdateBtn->setVisible(false);
     connect(m_installUpdateBtn, &QPushButton::clicked, this, &MainWindow::onInstallOtaUpdate);
     updateLayout->addWidget(m_installUpdateBtn);
 
     m_otaStatusLabel = new QLabel("Status: Idle", updateBox);
-    m_otaStatusLabel->setFixedHeight(36);
+    m_otaStatusLabel->setFixedHeight(32);
     m_otaStatusLabel->setStyleSheet("background-color: #0d131a; color: #b2dfdb; font-size: 12px; border: 1px solid #1e2c3c; border-radius: 4px; padding: 4px;");
     m_otaStatusLabel->setWordWrap(true);
     updateLayout->addWidget(m_otaStatusLabel);
 
     rightCol->addWidget(updateBox);
+    rightCol->addStretch();
     mainHLayout->addLayout(rightCol, 1);
 
     updateNetworkTabStats();
