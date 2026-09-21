@@ -12,6 +12,9 @@
 #include <QProcess>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QComboBox>
+#include <QSpinBox>
+#include <QCheckBox>
 
 class TouchCanvas;
 
@@ -41,17 +44,30 @@ private slots:
     void onCheckOtaUpdate();
     void onOtaVersionReply(QNetworkReply *reply);
     void onInstallOtaUpdate();
+    void updateOtaProgress();
 
     // Touch Calibration slots
     void onCalibrateTouchClicked();
     void onResetCalibrationClicked();
     void updateCalibrationStatus();
 
+    // GPIO Test slots
+    void onToggleLed1();
+    void onToggleBlinkTest();
+    void onBlinkTimeout();
+    void onHeartbeatModeChanged(int idx);
+    void onReadGpioPin();
+    void onSetGpioHigh();
+    void onSetGpioLow();
+    void onGpioAutoPollToggled(bool checked);
+    void onGpioPollTimeout();
+
 private:
     void setupUi();
     QWidget *createDashboardTab();
     QWidget *createTouchTestTab();
     QWidget *createHardwareControlTab();
+    QWidget *createGpioTestTab();
     QWidget *createNetworkOtaTab();
     QWidget *createSystemTab();
 
@@ -94,6 +110,21 @@ private:
     QPushButton *m_ledToggleBtn;
     bool m_ledState;
 
+    // GPIO Test tab widgets
+    QPushButton *m_led1ToggleBtn;
+    QLabel *m_led1Lamp;
+    bool m_led1State;
+    QPushButton *m_blinkTestBtn;
+    QTimer *m_blinkTimer;
+    bool m_blinkState;
+    QComboBox *m_heartbeatCombo;
+    QComboBox *m_gpioChipCombo;
+    QSpinBox *m_gpioLineSpin;
+    QLabel *m_gpioPinLamp;
+    QLabel *m_gpioPinStateLabel;
+    QCheckBox *m_gpioAutoPollCheck;
+    QTimer *m_gpioPollTimer;
+
     // Network & OTA widgets
     QLabel *m_eth0StatusLabel;
     QLabel *m_eth1StatusLabel;
@@ -110,7 +141,9 @@ private:
     QLabel *m_otaServerLabel;
     QPushButton *m_checkUpdateBtn;
     QPushButton *m_installUpdateBtn;
+    QProgressBar *m_otaProgressBar;
     QLabel *m_otaStatusLabel;
+    QTimer *m_otaProgressTimer;
     QNetworkAccessManager *m_netManager;
 
     QString m_otaServerUrl;

@@ -25,9 +25,25 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_ledState(false)
+    , m_led1State(false)
+    , m_blinkState(false)
+    , m_blinkTimer(nullptr)
+    , m_gpioPollTimer(nullptr)
+    , m_otaProgressBar(nullptr)
+    , m_otaProgressTimer(nullptr)
     , m_pingProcess(nullptr)
     , m_netManager(nullptr)
 {
+    m_blinkTimer = new QTimer(this);
+    connect(m_blinkTimer, &QTimer::timeout, this, &MainWindow::onBlinkTimeout);
+
+    m_gpioPollTimer = new QTimer(this);
+    connect(m_gpioPollTimer, &QTimer::timeout, this, &MainWindow::onGpioPollTimeout);
+
+    m_otaProgressTimer = new QTimer(this);
+    connect(m_otaProgressTimer, &QTimer::timeout, this, &MainWindow::updateOtaProgress);
+    m_otaProgressTimer->start(800);
+
     m_pingProcess = new QProcess(this);
     connect(m_pingProcess, &QProcess::readyReadStandardOutput, this, &MainWindow::onPingReadyRead);
     connect(m_pingProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
@@ -102,6 +118,7 @@ void MainWindow::setupUi()
     m_tabWidget->addTab(createDashboardTab(), "Dashboard");
     m_tabWidget->addTab(createTouchTestTab(), "Touch Test");
     m_tabWidget->addTab(createHardwareControlTab(), "Hardware && Display");
+    m_tabWidget->addTab(createGpioTestTab(), "GPIO Test");
     m_tabWidget->addTab(createNetworkOtaTab(), "Network && OTA");
     m_tabWidget->addTab(createSystemTab(), "System && Power");
 
@@ -348,6 +365,214 @@ QWidget *MainWindow::createHardwareControlTab()
 
     grid->addWidget(blBox, 0, 0);
     grid->addWidget(gpioBox, 0, 1);
+
+    return tab;
+}
+
+QWidget *MainWindow::createGpioTestTab()
+{
+    QWidget *tab = new QWidget(this);
+    QHBoxLayout *hLayout = new QHBoxLayout(tab);
+    hLayout->setContentsMargins(12, 10, 12, 10);
+    hLayout->setSpacing(12);
+
+    auto makeCard = [](const QString &title, const QString &accentCol) -> QGroupBox* {
+        QGroupBox *box = new QGroupBox(title);
+        box->setStyleSheet(QString(
+            "QGroupBox { font-size: 13px; font-weight: bold; color: %1; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 12px 10px 10px 10px; background-color: #141c26; }"
+            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
+        ).arg(accentCol));
+        return box;
+    };
+
+    // ================= LEFT COLUMN: ONBOARD HARDWARE LEDS =================
+    QVBoxLayout *leftCol = new QVBoxLayout();
+    leftCol->setSpacing(10);
+
+    QGroupBox *ledBox = makeCard("Carrier Board Hardware LEDs", "#00d2ff");
+    QVBoxLayout *ledLayout = new QVBoxLayout(ledBox);
+    ledLayout->setSpacing(10);
+    ledLayout->setContentsMargins(8, 8, 8, 8);
+
+    // LED1 section
+    QLabel *led1Title = new QLabel("User LED1 (/sys/class/leds/led1 -> gpio1 10):", ledBox);
+    led1Title->setStyleSheet("font-size: 12px; color: #8b949e; font-weight: bold;");
+    ledLayout->addWidget(led1Title);
+
+    QHBoxLayout *led1Row = new QHBoxLayout();
+    m_led1Lamp = new QLabel(ledBox);
+    m_led1Lamp->setFixedSize(28, 28);
+    m_led1Lamp->setStyleSheet("background-color: #21262d; border: 2px solid #30363d; border-radius: 14px;");
+
+    m_led1ToggleBtn = new QPushButton("Turn LED1 ON", ledBox);
+    m_led1ToggleBtn->setFixedHeight(36);
+    m_led1ToggleBtn->setStyleSheet("background-color: #1f2d3d; color: #00d2ff; font-weight: bold; font-size: 12px; border: 1px solid #2a3b4c; border-radius: 6px;");
+    connect(m_led1ToggleBtn, &QPushButton::clicked, this, &MainWindow::onToggleLed1);
+
+    m_blinkTestBtn = new QPushButton("Start Blink (1Hz)", ledBox);
+    m_blinkTestBtn->setFixedHeight(36);
+    m_blinkTestBtn->setStyleSheet("background-color: #263238; color: #ffb74d; font-weight: bold; font-size: 12px; border: 1px solid #37474f; border-radius: 6px;");
+    connect(m_blinkTestBtn, &QPushButton::clicked, this, &MainWindow::onToggleBlinkTest);
+
+    led1Row->addWidget(m_led1Lamp);
+    led1Row->addWidget(m_led1ToggleBtn, 1);
+    led1Row->addWidget(m_blinkTestBtn, 1);
+    ledLayout->addLayout(led1Row);
+
+    ledLayout->addSpacing(6);
+
+    // Heartbeat LED section
+    QLabel *hbTitle = new QLabel("System Heartbeat LED (/sys/class/leds/heartbeat -> gpio5 3):", ledBox);
+    hbTitle->setStyleSheet("font-size: 12px; color: #8b949e; font-weight: bold;");
+    ledLayout->addWidget(hbTitle);
+
+    QHBoxLayout *hbRow = new QHBoxLayout();
+    m_heartbeatCombo = new QComboBox(ledBox);
+    m_heartbeatCombo->setFixedHeight(34);
+    m_heartbeatCombo->addItem("Kernel Trigger (Heartbeat CPU Pulse)");
+    m_heartbeatCombo->addItem("Manual Trigger (Disabled / Off)");
+    m_heartbeatCombo->setStyleSheet("QComboBox { background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: bold; } QComboBox QAbstractItemView { background-color: #141c26; color: #ffffff; selection-background-color: #0288d1; }");
+    connect(m_heartbeatCombo, static_cast<void(QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, &MainWindow::onHeartbeatModeChanged);
+
+    hbRow->addWidget(m_heartbeatCombo);
+    ledLayout->addLayout(hbRow);
+
+    leftCol->addWidget(ledBox);
+
+    // Quick Presets Box
+    QGroupBox *presetBox = makeCard("Carrier Board Pin Presets", "#ffd54f");
+    QVBoxLayout *presetLayout = new QVBoxLayout(presetBox);
+    presetLayout->setSpacing(6);
+    presetLayout->setContentsMargins(8, 8, 8, 8);
+
+    QGridLayout *btnGrid = new QGridLayout();
+    btnGrid->setSpacing(6);
+
+    auto addPresetBtn = [this, btnGrid](int r, int c, const QString &name, int chip, int line) {
+        QPushButton *btn = new QPushButton(name);
+        btn->setFixedHeight(30);
+        btn->setStyleSheet("background-color: #1a2332; color: #90caf9; font-size: 11px; border: 1px solid #233242; border-radius: 4px;");
+        connect(btn, &QPushButton::clicked, this, [this, chip, line]() {
+            if (m_gpioChipCombo) m_gpioChipCombo->setCurrentIndex(chip);
+            if (m_gpioLineSpin) m_gpioLineSpin->setValue(line);
+            onReadGpioPin();
+        });
+        btnGrid->addWidget(btn, r, c);
+    };
+
+    addPresetBtn(0, 0, "LED1 (Chip 0, Line 10)", 0, 10);
+    addPresetBtn(0, 1, "CAN 3V3 (Chip 0, Line 18)", 0, 18);
+    addPresetBtn(1, 0, "Heartbeat (Chip 4, Line 3)", 4, 3);
+    addPresetBtn(1, 1, "Backlight PWM (Chip 0, Line 8)", 0, 8);
+    addPresetBtn(2, 0, "UART3 TX (Chip 0, Line 24)", 0, 24);
+    addPresetBtn(2, 1, "UART3 RX (Chip 0, Line 25)", 0, 25);
+    presetLayout->addLayout(btnGrid);
+
+    leftCol->addWidget(presetBox);
+    leftCol->addStretch();
+    hLayout->addLayout(leftCol, 1);
+
+    // ================= RIGHT COLUMN: UNIVERSAL GPIO PIN TEST BENCH =================
+    QVBoxLayout *rightCol = new QVBoxLayout();
+    rightCol->setSpacing(10);
+
+    QGroupBox *testBenchBox = makeCard("Universal GPIO Pin Test Bench (libgpiod)", "#4caf50");
+    QVBoxLayout *benchLayout = new QVBoxLayout(testBenchBox);
+    benchLayout->setSpacing(10);
+    benchLayout->setContentsMargins(10, 10, 10, 10);
+
+    // Chip & Line Selector Row
+    QHBoxLayout *selRow = new QHBoxLayout();
+    QLabel *chipLbl = new QLabel("Chip:", testBenchBox);
+    chipLbl->setStyleSheet("color: #b0bec5; font-size: 12px; font-weight: bold;");
+    m_gpioChipCombo = new QComboBox(testBenchBox);
+    m_gpioChipCombo->setFixedHeight(32);
+    m_gpioChipCombo->addItem("gpiochip0 (Bank 1)");
+    m_gpioChipCombo->addItem("gpiochip1 (Bank 2)");
+    m_gpioChipCombo->addItem("gpiochip2 (Bank 3)");
+    m_gpioChipCombo->addItem("gpiochip3 (Bank 4)");
+    m_gpioChipCombo->addItem("gpiochip4 (Bank 5)");
+    m_gpioChipCombo->setStyleSheet("QComboBox { background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 6px; font-size: 11px; } QComboBox QAbstractItemView { background-color: #141c26; color: #ffffff; }");
+
+    QLabel *lineLbl = new QLabel("Line:", testBenchBox);
+    lineLbl->setStyleSheet("color: #b0bec5; font-size: 12px; font-weight: bold;");
+    m_gpioLineSpin = new QSpinBox(testBenchBox);
+    m_gpioLineSpin->setFixedHeight(32);
+    m_gpioLineSpin->setRange(0, 31);
+    m_gpioLineSpin->setValue(10);
+    m_gpioLineSpin->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: bold;");
+
+    selRow->addWidget(chipLbl);
+    selRow->addWidget(m_gpioChipCombo, 1);
+    selRow->addWidget(lineLbl);
+    selRow->addWidget(m_gpioLineSpin);
+    benchLayout->addLayout(selRow);
+
+    // Visual Pin Status Display Box
+    QFrame *statusFrame = new QFrame(testBenchBox);
+    statusFrame->setStyleSheet("background-color: #0d131a; border: 1px solid #1e2c3c; border-radius: 8px; padding: 10px;");
+    QHBoxLayout *statusRow = new QHBoxLayout(statusFrame);
+    statusRow->setContentsMargins(10, 8, 10, 8);
+
+    m_gpioPinLamp = new QLabel(statusFrame);
+    m_gpioPinLamp->setFixedSize(36, 36);
+    m_gpioPinLamp->setStyleSheet("background-color: #21262d; border: 2px solid #30363d; border-radius: 18px;");
+
+    QVBoxLayout *stateTextLayout = new QVBoxLayout();
+    m_gpioPinStateLabel = new QLabel("State: Unknown / Ready", statusFrame);
+    m_gpioPinStateLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;");
+    QLabel *pinDetail = new QLabel("libgpiod character device direct status", statusFrame);
+    pinDetail->setStyleSheet("font-size: 11px; color: #78909c;");
+    stateTextLayout->addWidget(m_gpioPinStateLabel);
+    stateTextLayout->addWidget(pinDetail);
+
+    statusRow->addWidget(m_gpioPinLamp);
+    statusRow->addSpacing(10);
+    statusRow->addLayout(stateTextLayout, 1);
+    benchLayout->addWidget(statusFrame);
+
+    // Output Controls
+    QLabel *outTitle = new QLabel("Digital Output Mode (Write to Pin):", testBenchBox);
+    outTitle->setStyleSheet("font-size: 12px; color: #8b949e; font-weight: bold;");
+    benchLayout->addWidget(outTitle);
+
+    QHBoxLayout *outRow = new QHBoxLayout();
+    QPushButton *setHighBtn = new QPushButton("Set HIGH (1 / 3.3V)", testBenchBox);
+    setHighBtn->setFixedHeight(36);
+    setHighBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-size: 12px; font-weight: bold; border-radius: 6px;");
+    connect(setHighBtn, &QPushButton::clicked, this, &MainWindow::onSetGpioHigh);
+
+    QPushButton *setLowBtn = new QPushButton("Set LOW (0 / 0V)", testBenchBox);
+    setLowBtn->setFixedHeight(36);
+    setLowBtn->setStyleSheet("background-color: #37474f; color: #cfd8dc; font-size: 12px; font-weight: bold; border-radius: 6px;");
+    connect(setLowBtn, &QPushButton::clicked, this, &MainWindow::onSetGpioLow);
+
+    outRow->addWidget(setHighBtn);
+    outRow->addWidget(setLowBtn);
+    benchLayout->addLayout(outRow);
+
+    // Input Controls
+    QLabel *inTitle = new QLabel("Digital Input Mode (Read from Pin):", testBenchBox);
+    inTitle->setStyleSheet("font-size: 12px; color: #8b949e; font-weight: bold;");
+    benchLayout->addWidget(inTitle);
+
+    QHBoxLayout *inRow = new QHBoxLayout();
+    QPushButton *readBtn = new QPushButton("Read Pin (gpioget)", testBenchBox);
+    readBtn->setFixedHeight(36);
+    readBtn->setStyleSheet("background-color: #0288d1; color: #ffffff; font-size: 12px; font-weight: bold; border-radius: 6px;");
+    connect(readBtn, &QPushButton::clicked, this, &MainWindow::onReadGpioPin);
+
+    m_gpioAutoPollCheck = new QCheckBox("Live Auto-Poll (500ms)", testBenchBox);
+    m_gpioAutoPollCheck->setStyleSheet("QCheckBox { color: #80cbc4; font-size: 12px; font-weight: bold; } QCheckBox::indicator { width: 18px; height: 18px; }");
+    connect(m_gpioAutoPollCheck, &QCheckBox::toggled, this, &MainWindow::onGpioAutoPollToggled);
+
+    inRow->addWidget(readBtn, 1);
+    inRow->addWidget(m_gpioAutoPollCheck);
+    benchLayout->addLayout(inRow);
+
+    rightCol->addWidget(testBenchBox);
+    rightCol->addStretch();
+    hLayout->addLayout(rightCol, 1);
 
     return tab;
 }
@@ -688,6 +913,17 @@ QWidget *MainWindow::createNetworkOtaTab()
     connect(m_installUpdateBtn, &QPushButton::clicked, this, &MainWindow::onInstallOtaUpdate);
     updateLayout->addWidget(m_installUpdateBtn);
 
+    m_otaProgressBar = new QProgressBar(updateBox);
+    m_otaProgressBar->setRange(0, 100);
+    m_otaProgressBar->setValue(0);
+    m_otaProgressBar->setFixedHeight(24);
+    m_otaProgressBar->setTextVisible(true);
+    m_otaProgressBar->setStyleSheet(
+        "QProgressBar { background-color: #0d131a; border: 1px solid #1e2c3c; border-radius: 6px; text-align: center; color: #ffffff; font-weight: bold; font-size: 11px; }"
+        "QProgressBar::chunk { background-color: #00e676; border-radius: 5px; }"
+    );
+    updateLayout->addWidget(m_otaProgressBar);
+
     m_otaStatusLabel = new QLabel("Status: Idle", updateBox);
     m_otaStatusLabel->setFixedHeight(32);
     m_otaStatusLabel->setStyleSheet("background-color: #0d131a; color: #b2dfdb; font-size: 12px; border: 1px solid #1e2c3c; border-radius: 4px; padding: 4px;");
@@ -988,5 +1224,181 @@ void MainWindow::updateCalibrationStatus()
         m_calibrationStatusLabel->setText(TouchCalibration::instance().statusString());
     }
 }
+
+// ============================================================
+//                    GPIO TEST SLOTS
+// ============================================================
+
+void MainWindow::onToggleLed1()
+{
+    m_led1State = !m_led1State;
+    QFile f("/sys/class/leds/led1/brightness");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        f.write(m_led1State ? "1\n" : "0\n");
+        f.close();
+    }
+    if (m_led1Lamp) {
+        m_led1Lamp->setStyleSheet(m_led1State ?
+            "background-color: #00e676; border: 2px solid #69f0ae; border-radius: 14px;" :
+            "background-color: #21262d; border: 2px solid #30363d; border-radius: 14px;");
+    }
+    if (m_led1ToggleBtn) {
+        m_led1ToggleBtn->setText(m_led1State ? "Turn LED1 OFF" : "Turn LED1 ON");
+        m_led1ToggleBtn->setStyleSheet(m_led1State ?
+            "background-color: #2e7d32; color: #ffffff; font-weight: bold; font-size: 12px; border: 1px solid #4caf50; border-radius: 6px;" :
+            "background-color: #1f2d3d; color: #00d2ff; font-weight: bold; font-size: 12px; border: 1px solid #2a3b4c; border-radius: 6px;");
+    }
+}
+
+void MainWindow::onToggleBlinkTest()
+{
+    if (m_blinkTimer->isActive()) {
+        m_blinkTimer->stop();
+        m_blinkTestBtn->setText("Start Blink (1Hz)");
+        m_blinkTestBtn->setStyleSheet("background-color: #263238; color: #ffb74d; font-weight: bold; font-size: 12px; border: 1px solid #37474f; border-radius: 6px;");
+        // Turn LED1 off
+        QFile f("/sys/class/leds/led1/brightness");
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            f.write("0\n");
+            f.close();
+        }
+        m_led1State = false;
+        if (m_led1Lamp) {
+            m_led1Lamp->setStyleSheet("background-color: #21262d; border: 2px solid #30363d; border-radius: 14px;");
+        }
+    } else {
+        m_blinkTimer->start(500); // 1Hz cycle (500ms ON, 500ms OFF)
+        m_blinkTestBtn->setText("Stop Blink Test");
+        m_blinkTestBtn->setStyleSheet("background-color: #d84315; color: #ffffff; font-weight: bold; font-size: 12px; border: 1px solid #ff7043; border-radius: 6px;");
+    }
+}
+
+void MainWindow::onBlinkTimeout()
+{
+    m_blinkState = !m_blinkState;
+    QFile f("/sys/class/leds/led1/brightness");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        f.write(m_blinkState ? "1\n" : "0\n");
+        f.close();
+    }
+    if (m_led1Lamp) {
+        m_led1Lamp->setStyleSheet(m_blinkState ?
+            "background-color: #00e676; border: 2px solid #69f0ae; border-radius: 14px;" :
+            "background-color: #21262d; border: 2px solid #30363d; border-radius: 14px;");
+    }
+}
+
+void MainWindow::onHeartbeatModeChanged(int idx)
+{
+    QFile f("/sys/class/leds/heartbeat/trigger");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        f.write(idx == 0 ? "heartbeat\n" : "none\n");
+        f.close();
+    }
+}
+
+void MainWindow::onReadGpioPin()
+{
+    if (!m_gpioChipCombo || !m_gpioLineSpin) return;
+
+    QString chip = QString("gpiochip%1").arg(m_gpioChipCombo->currentIndex());
+    int line = m_gpioLineSpin->value();
+
+    QProcess proc;
+    proc.start("gpioget", QStringList() << chip << QString::number(line));
+    if (proc.waitForFinished(300)) {
+        QString out = proc.readAllStandardOutput().trimmed();
+        bool isHigh = (out == "1");
+        if (m_gpioPinLamp) {
+            m_gpioPinLamp->setStyleSheet(isHigh ?
+                "background-color: #00e676; border: 3px solid #b9f6ca; border-radius: 18px;" :
+                "background-color: #21262d; border: 2px solid #455a64; border-radius: 18px;");
+        }
+        if (m_gpioPinStateLabel) {
+            m_gpioPinStateLabel->setText(QString("State: %1 (%2)").arg(isHigh ? "HIGH (1)" : "LOW (0)").arg(isHigh ? "3.3V" : "0V"));
+            m_gpioPinStateLabel->setStyleSheet(QString("font-size: 14px; font-weight: bold; color: %1;").arg(isHigh ? "#00e676" : "#cfd8dc"));
+        }
+    } else {
+        if (m_gpioPinStateLabel) {
+            m_gpioPinStateLabel->setText("Error: gpioget timed out or line busy");
+            m_gpioPinStateLabel->setStyleSheet("font-size: 13px; color: #ef5350;");
+        }
+    }
+}
+
+void MainWindow::onSetGpioHigh()
+{
+    if (!m_gpioChipCombo || !m_gpioLineSpin) return;
+
+    QString chip = QString("gpiochip%1").arg(m_gpioChipCombo->currentIndex());
+    int line = m_gpioLineSpin->value();
+
+    QProcess::execute("gpioset", QStringList() << chip << QString("%1=1").arg(line));
+    onReadGpioPin();
+}
+
+void MainWindow::onSetGpioLow()
+{
+    if (!m_gpioChipCombo || !m_gpioLineSpin) return;
+
+    QString chip = QString("gpiochip%1").arg(m_gpioChipCombo->currentIndex());
+    int line = m_gpioLineSpin->value();
+
+    QProcess::execute("gpioset", QStringList() << chip << QString("%1=0").arg(line));
+    onReadGpioPin();
+}
+
+void MainWindow::onGpioAutoPollToggled(bool checked)
+{
+    if (checked) {
+        m_gpioPollTimer->start(500);
+        onReadGpioPin();
+    } else {
+        m_gpioPollTimer->stop();
+    }
+}
+
+void MainWindow::onGpioPollTimeout()
+{
+    onReadGpioPin();
+}
+
+// ============================================================
+//                   OTA REAL-TIME PROGRESS
+// ============================================================
+
+void MainWindow::updateOtaProgress()
+{
+    QFile f("/tmp/ota_progress.json");
+    if (!f.exists()) return;
+
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QByteArray data = f.readAll();
+        f.close();
+
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            QString stage = obj.value("stage").toString();
+            int percent = obj.value("percent").toInt();
+            QString detail = obj.value("detail").toString();
+
+            if (m_otaProgressBar) {
+                m_otaProgressBar->setValue(percent);
+            }
+            if (m_otaStatusLabel && !detail.isEmpty()) {
+                m_otaStatusLabel->setText(detail);
+                if (stage == "downloading" || stage == "flashing") {
+                    m_otaStatusLabel->setStyleSheet("color: #00d2ff; font-size: 12px; font-weight: bold;");
+                } else if (stage == "completed") {
+                    m_otaStatusLabel->setStyleSheet("color: #00e676; font-size: 13px; font-weight: bold;");
+                } else if (stage == "failed") {
+                    m_otaStatusLabel->setStyleSheet("color: #ef5350; font-size: 12px; font-weight: bold;");
+                }
+            }
+        }
+    }
+}
+
 
 

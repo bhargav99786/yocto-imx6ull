@@ -1,6 +1,7 @@
 #!/bin/sh
-# Remote OTA Update Agent
-# Periodically queries OTA_SERVER_URL for updates and applies .swu packages via SWUpdate
+# ==============================================================================
+# Remote OTA Update Agent with Real-Time Percentage Tracking
+# ==============================================================================
 
 CONF_FILE="/etc/ota-server.conf"
 
@@ -8,10 +9,31 @@ if [ -f "$CONF_FILE" ]; then
     . "$CONF_FILE"
 fi
 
-OTA_SERVER_URL=${OTA_SERVER_URL:-"http://192.168.1.100:8000"}
+OTA_SERVER_URL=${OTA_SERVER_URL:-"http://192.168.0.110:8000"}
 CHECK_INTERVAL=${CHECK_INTERVAL:-30}
 
+# Helper to broadcast progress to JSON file and log
+set_progress() {
+    STAGE="$1"
+    PERCENT="$2"
+    DETAIL="$3"
+    echo "[OTA Agent] [${PERCENT}%] ${DETAIL}"
+    cat <<EOF > /tmp/ota_progress.json
+{
+  "stage": "${STAGE}",
+  "percent": ${PERCENT},
+  "detail": "${DETAIL}"
+}
+EOF
+}
+
 echo "[OTA Agent] Starting OTA update daemon. Server URL: ${OTA_SERVER_URL}"
+set_progress "idle" 0 "OTA Agent ready"
+
+# Ensure hwrevision exists for SWUpdate hardware compatibility
+if [ ! -f /etc/hwrevision ]; then
+    echo "imx6ullevk 1.0" > /etc/hwrevision
+fi
 
 while true; do
     sleep "$CHECK_INTERVAL"
@@ -39,34 +61,108 @@ while true; do
 
     if [ "$REMOTE_VER" != "$LOCAL_VER" ]; then
         echo "[OTA Agent] New version available: $REMOTE_VER (Current: $LOCAL_VER)"
-        echo "[OTA Agent] Downloading update package from $UPDATE_URL..."
+        set_progress "downloading" 0 "Starting download for version ${REMOTE_VER}..."
 
         SWU_FILE="/tmp/update.swu"
         rm -f "$SWU_FILE"
 
-        curl -s -f "$UPDATE_URL" -o "$SWU_FILE"
-        if [ $? -eq 0 ] && [ -s "$SWU_FILE" ]; then
-            echo "[OTA Agent] Download complete. Executing SWUpdate..."
-            
-            # Ensure target symlink is set before swupdate runs
-            CURRENT_ROOT=$(fw_printenv active_rootfs 2>/dev/null | cut -d'=' -f2)
-            if [ "$CURRENT_ROOT" = "rootfs_b" ]; then
-                ln -sf /dev/mmcblk1p2 /dev/update_target
+        # Get Content-Length for exact download percentage
+        CONTENT_LEN=$(curl -sIL "$UPDATE_URL" 2>/dev/null | grep -i "^Content-Length:" | tr -d '\r' | awk '{print $2}' | tail -n 1)
+        [ -z "$CONTENT_LEN" ] && CONTENT_LEN=111121920 # Default fallback ~106MB
+
+        # Start download in background
+        curl -s -f "$UPDATE_URL" -o "$SWU_FILE" &
+        CURL_PID=$!
+
+        while kill -0 "$CURL_PID" 2>/dev/null; do
+            CUR_BYTES=$(stat -c%s "$SWU_FILE" 2>/dev/null || echo 0)
+            if [ "$CONTENT_LEN" -gt 0 ]; then
+                DL_PCT=$(( (CUR_BYTES * 50) / CONTENT_LEN ))
+                [ "$DL_PCT" -gt 50 ] && DL_PCT=50
+                CUR_MB=$(( CUR_BYTES / 1048576 ))
+                TOT_MB=$(( CONTENT_LEN / 1048576 ))
+                set_progress "downloading" "$DL_PCT" "Downloading package: ${DL_PCT}% (${CUR_MB}MB / ${TOT_MB}MB)"
+            fi
+            sleep 0.8
+        done
+
+        wait "$CURL_PID"
+        DL_RES=$?
+
+        if [ $DL_RES -ne 0 ] || [ ! -s "$SWU_FILE" ]; then
+            set_progress "failed" 0 "Download failed from $UPDATE_URL"
+            continue
+        fi
+
+        set_progress "downloading" 50 "Download completed (100%). Preparing to flash..."
+        sleep 1
+
+        # Detect active drive & alternate partition dynamically
+        CURRENT_PART=$(findmnt -n -o SOURCE / 2>/dev/null || mount | grep " / " | cut -d' ' -f1)
+        DISK=$(echo "$CURRENT_PART" | sed -E 's/p[0-9]+$//')
+        [ -z "$DISK" ] && DISK="/dev/mmcblk0"
+
+        CURRENT_ROOT=$(fw_printenv active_rootfs 2>/dev/null | cut -d'=' -f2)
+        if [ "$CURRENT_ROOT" = "rootfs_b" ] || echo "$CURRENT_PART" | grep -q "p3"; then
+            TARGET_PART="${DISK}p2"
+        else
+            TARGET_PART="${DISK}p3"
+        fi
+
+        ln -sf "$TARGET_PART" /dev/update_target
+        echo "[OTA Agent] Target partition set to $TARGET_PART"
+
+        # Baseline sector count for progress calculation
+        DISK_NAME=$(basename "$DISK")
+        PART_NAME=$(basename "$TARGET_PART")
+        STAT_FILE="/sys/block/${DISK_NAME}/${PART_NAME}/stat"
+        
+        INIT_SECTORS=0
+        if [ -f "$STAT_FILE" ]; then
+            INIT_SECTORS=$(awk '{print $7}' "$STAT_FILE" 2>/dev/null || echo 0)
+        fi
+
+        set_progress "flashing" 52 "Flashing RootFS to alternate bank ($TARGET_PART)..."
+
+        # Execute SWUpdate in background and monitor write progress
+        swupdate -i "$SWU_FILE" > /tmp/swupdate.log 2>&1 &
+        SWU_PID=$!
+
+        ESTIMATED_SECTORS=700000 # ~350MB uncompressed rootfs in 512B sectors
+        START_TIME=$(date +%s)
+
+        while kill -0 "$SWU_PID" 2>/dev/null; do
+            NOW=$(date +%s)
+            ELAPSED=$(( NOW - START_TIME ))
+
+            if [ -f "$STAT_FILE" ]; then
+                CUR_SECTORS=$(awk '{print $7}' "$STAT_FILE" 2>/dev/null || echo "$INIT_SECTORS")
+                WRITTEN_SECTORS=$(( CUR_SECTORS - INIT_SECTORS ))
+                [ "$WRITTEN_SECTORS" -lt 0 ] && WRITTEN_SECTORS=0
+                FLASH_PCT=$(( 50 + (WRITTEN_SECTORS * 45 / ESTIMATED_SECTORS) ))
             else
-                ln -sf /dev/mmcblk1p3 /dev/update_target
+                # Fallback to time-based estimation (approx 90s)
+                FLASH_PCT=$(( 50 + (ELAPSED * 45 / 90) ))
             fi
 
-            swupdate -i "$SWU_FILE"
-            if [ $? -eq 0 ]; then
-                echo "$REMOTE_VER" > /etc/sw-versions
-                echo "[OTA Agent] Update successful! Rebooting in 3 seconds..."
-                sleep 3
-                reboot
-            else
-                echo "[OTA Agent] SWUpdate failed to apply update."
-            fi
+            [ "$FLASH_PCT" -gt 96 ] && FLASH_PCT=96
+            [ "$FLASH_PCT" -lt 52 ] && FLASH_PCT=52
+
+            set_progress "flashing" "$FLASH_PCT" "Flashing RootFS: ${FLASH_PCT}%"
+            sleep 1
+        done
+
+        wait "$SWU_PID"
+        SWU_RES=$?
+
+        if [ $SWU_RES -eq 0 ]; then
+            set_progress "completed" 100 "OTA Update successful! Rebooting system..."
+            echo "$REMOTE_VER" > /etc/sw-versions
+            sleep 3
+            reboot
         else
-            echo "[OTA Agent] Download failed."
+            set_progress "failed" 0 "SWUpdate failed to apply update (Error code: $SWU_RES)"
+            cat /tmp/swupdate.log | tail -n 10
         fi
     fi
 done
