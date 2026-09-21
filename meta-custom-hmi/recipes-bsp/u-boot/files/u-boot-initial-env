@@ -1,0 +1,7 @@
+bootdelay=1
+baudrate=115200
+active_rootfs=rootfs_a
+mmcpart=2
+upgrade_available=0
+bootlimit=3
+bootcount=0
