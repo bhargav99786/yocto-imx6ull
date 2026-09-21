@@ -6,6 +6,7 @@ build-hmi/cache/
 build-hmi/bitbake-cookerdaemon.log
 build-hmi/*.lock
 build-hmi/*.sock
+ota_server/
 
 # Output binaries and temporary archives
 *.dtb
