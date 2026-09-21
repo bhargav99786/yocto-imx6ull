@@ -124,8 +124,11 @@ while true; do
 
         set_progress "flashing" 52 "Flashing RootFS to alternate bank ($TARGET_PART)..."
 
-        # Execute SWUpdate in background and monitor write progress
-        swupdate -i "$SWU_FILE" > /tmp/swupdate.log 2>&1 &
+        # Ensure /etc/u-boot-initial-env exists
+        [ ! -f /etc/u-boot-initial-env ] && fw_printenv > /etc/u-boot-initial-env 2>/dev/null || true
+
+        # Execute SWUpdate in background (-m -M disables internal state markers, postupdate.sh manages A/B switch)
+        swupdate -m -M -i "$SWU_FILE" > /tmp/swupdate.log 2>&1 &
         SWU_PID=$!
 
         ESTIMATED_SECTORS=700000 # ~350MB uncompressed rootfs in 512B sectors
