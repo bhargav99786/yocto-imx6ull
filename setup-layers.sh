@@ -10,13 +10,13 @@ echo "========================================================"
 # Poky core
 if [ ! -d "poky" ]; then
     echo "Cloning poky (kirkstone)..."
-    git clone -b kirkstone git://git.yoctoproject.org/poky
+    git clone -b kirkstone https://git.yoctoproject.org/poky
 fi
 
 # meta-openembedded
 if [ ! -d "meta-openembedded" ]; then
     echo "Cloning meta-openembedded (kirkstone)..."
-    git clone -b kirkstone git://git.openembedded.org/meta-openembedded
+    git clone -b kirkstone https://git.openembedded.org/meta-openembedded
 fi
 
 # meta-freescale

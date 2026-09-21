@@ -26,6 +26,7 @@ splash.bmp
 .DS_Store
 .idea/
 .vscode/
+meta-custom-hmi/scratch/
 
 # External Yocto layers and documentation
 poky/
