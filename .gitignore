@@ -16,6 +16,7 @@ touch_draw
 debian-binary
 empty_test.txt
 *.imx
+!meta-custom-hmi/recipes-bsp/u-boot/files/*.imx
 logo.bmp
 splash.bmp
 

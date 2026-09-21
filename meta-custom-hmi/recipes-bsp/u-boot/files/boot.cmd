@@ -8,6 +8,12 @@ if test -z "${mmcdev}"; then
     setenv mmcdev 0
 fi
 
+# 2. Display initial power-on boot logo immediately:
+if load mmc ${mmcdev}:1 0x88000000 logo.bmp || load mmc ${mmcdev}:1 0x88000000 splash.bmp; then
+    bmp display 0x88000000 0 0 || bmp display 0x88000000 || true
+    gpio set 8 || true
+fi
+
 # 2. Determine active A/B rootfs bank
 if test -z "${active_rootfs}"; then
     setenv active_rootfs "rootfs_a"
@@ -54,6 +60,9 @@ if load mmc ${mmcdev}:1 ${fdt_addr} okmx6ull-c-emmc.dtb; then
 elif load mmc ${mmcdev}:1 ${fdt_addr} imx6ull-custom-hmi.dtb; then
     echo "Loaded imx6ull-custom-hmi.dtb"
 fi
+
+# Hold the clean, centered power-on logo visible for total 2 seconds:
+sleep 1.5
 
 # 7. Clean handoff right before launching the kernel:
 # Wipe full 4MB (0x100000 words) so all 600 lines are black (NO bottom lines remaining!):
