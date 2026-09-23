@@ -137,8 +137,70 @@ The resulting `.swu` update file will be placed in `build-hmi/tmp/deploy/images/
 
 ---
 
+## 6. Automatic Factory eMMC Flasher (`emmc-installer`)
+
+The system includes an automated first-boot factory installer that clones the complete system from an SD card onto the onboard eMMC chip with a dual-bank A/B partitioning layout.
+
+### A/B Partition Scheme:
+- **`p1` (128 MB, FAT)**: Shared boot partition containing `boot.scr`, `zImage`, device tree binaries (`okmx6ull-c-emmc.dtb`), and power-on splash logo (`logo.bmp`).
+- **`p2` (Bank A RootFS, ext4)**: Primary active production root filesystem.
+- **`p3` (Bank B RootFS, ext4)**: Alternate standby partition for SWUpdate OTA upgrades.
+- **`p4` (Data Partition, ext4)**: Persistent user storage for application databases, configuration files, and system logs.
+
+### Detection & Bootloader Initialization:
+- **Hardware-Level Detection**: The installer inspects `/sys/block/<dev>/device/type` (`MMC` vs `SD`) and hardware boot partitions (`/dev/<dev>boot0`) to reliably distinguish the MicroSD card from the onboard eMMC regardless of kernel enumeration order.
+- **U-Boot Persistent Configuration**: During factory flashing, the installer initializes U-Boot environment variables for seamless eMMC boot:
+  - `fl_menu1=0`: Disables vendor interactive menu prompts for silent autoboot.
+  - `bootdev=emmc` & `mmcdev=1`: Targets the onboard eMMC (USDHC2).
+  - `panel=TFT70AB-1024x600`: Configures the 1024x600 RGB LCD display.
+  - `active_rootfs=rootfs_a`: Sets Bank A as the default active bank.
+
+---
+
+## 7. Interactive HMI Application Features (`hmi-app`)
+
+The Qt 5.15 HMI application provides an integrated testing and operations suite:
+
+### A. Dedicated SPI Test Tab
+Designed for testing arbitrary SPI peripherals, bus communication, and signal integrity without requiring specific peripheral hardware:
+- **Interfaces**: Supports **ECSPI1** (`/dev/spidev0.0`) and **ECSPI2** (`/dev/spidev1.0`).
+- **Configurable Bus Speeds**: 100 kHz, 500 kHz, 1 MHz (default), 5 MHz, 10 MHz, 20 MHz.
+- **Test Modes**:
+  1. **Loopback Test (MOSI → MISO)**: Transmits a 16-byte reference pattern and verifies byte-for-byte matching with visual PASS/FAIL status.
+  2. **JEDEC ID Probe (0x9F)**: Queries Manufacturer ID, Memory Type, and Capacity from SPI Flash / EEPROM chips.
+  3. **Walking Bit Sweep**: Transmits walking 1s (`0x01` to `0x80`) to verify signal integrity across data pins.
+  4. **Custom Hex / ASCII Transfers**: Send arbitrary byte sequences and inspect full-duplex responses in Hex and ASCII formats.
+
+### B. Hardware UART Console Tab
+- **Ports**: Direct access to `/dev/ttymxc1` (UART2), `/dev/ttymxc2` (UART3), `/dev/ttymxc3` (UART4), and `/dev/ttymxc4` (UART5).
+- **Features**: Real-time asynchronous RX/TX log monitor with timestamps, baud rate selector (9600 to 921600), loopback ping test (`PING_OKMX6ULL`), and dynamic P17 pinout reference.
+
+### C. Display Sleep & Touch-Wake Control
+- **Inactivity Timeout**: Configurable sleep timer (Always On, 30s, 1m, 2m, 5m, or custom seconds) persisted in `/etc/hmi-sleep.conf`.
+- **Instant Sleep Test**: Blank display immediately with screen tap to wake.
+- **Daemon Architecture**: `hmi-sleep-daemon` polls non-exclusive evdev events on `/dev/input/touchscreen0` and controls `/sys/class/graphics/fb0/blank`.
+
+### D. System Architecture Paths & P17 Pinout Reference
+- **System Paths Table**: Comprehensive documentation of application binaries, systemd units, network configs, and OTA paths.
+- **P17 Expansion Header Table**: Full 40-pin hardware reference showing pin numbers, SoC signals, peripheral functions, and voltage levels.
+
+---
+
+## 8. Dual-Bank Fail-Safe OTA Workflow
+
+1. **Host Server**: Run an HTTP server serving `version.json` and `update.swu`:
+   ```bash
+   python3 -m http.server 8000 --directory ota_server/
+   ```
+2. **Device Trigger**: Navigate to the **Network & OTA** tab on the HMI screen:
+   - Click **"Check for Update"** to query the manifest.
+   - Click **"Install Update"** to download and stream into the inactive bank (`rootfs_b` or `rootfs_a`) with live percentage tracking.
+3. **Rollback Safety**: U-Boot watchdog (`bootlimit 3`, `bootcount`) automatically rolls back to the previous bank if the newly flashed image fails to confirm boot via `confirm-boot.service`.
+
+---
+
 ## Licensing & Author
 
-- **Target Hardware**: NXP i.MX6ULL Custom HMI Board
+- **Target Hardware**: NXP i.MX6ULL Custom HMI Board (OKMX6ULL-C Compatible)
 - **Maintainer**: Custom HMI Solutions Engineering Team
 - **License**: MIT

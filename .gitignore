@@ -42,3 +42,9 @@ boot.scr
 /hmi-app
 build-hmi/conf/templateconf.cfg
 
+# Vendor trees, temporary builds, and generated proposals
+build/
+OKMX6ULL-C_Qt5.6+Linux4.1/
+*.pdf
+*.html
+
