@@ -222,8 +222,14 @@ umount /mnt/sd_boot 2>/dev/null || true
 
 # Initialize U-Boot environment variables for A/B booting
 if [ -x /usr/bin/fw_setenv ]; then
-    fw_setenv active_rootfs rootfs_a || true
+    echo "  Configuring eMMC U-Boot environment..."
+    fw_setenv fl_menu1 0 || true
+    fw_setenv bootdev emmc || true
+    fw_setenv mmcdev 1 || true
     fw_setenv mmcpart 1 || true
+    fw_setenv active_rootfs rootfs_a || true
+    fw_setenv panel TFT70AB-1024x600 || true
+    fw_setenv bootcmd "setenv mmcdev 1; if mmc rescan; then if run loadbootscript; then run bootscript; else run mmcboot; fi; else run netboot; fi" || true
     fw_setenv upgrade_available 0 || true
     fw_setenv bootcount 0 || true
     fw_setenv bootlimit 3 || true
