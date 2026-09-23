@@ -15,6 +15,8 @@
 #include <QComboBox>
 #include <QSpinBox>
 #include <QCheckBox>
+#include <QTextEdit>
+#include <QSocketNotifier>
 
 class TouchCanvas;
 
@@ -33,6 +35,19 @@ private slots:
     void onColorButtonClicked(const QColor &color);
     void onRebootClicked();
     void onShutdownClicked();
+
+    // Sleep Timer slots
+    void onSleepPresetClicked(int seconds);
+    void onApplyCustomSleep();
+    void onSleepNowClicked();
+
+    // UART slots
+    void onUartPortChanged(int index);
+    void onOpenCloseUart();
+    void onSendUartData();
+    void onSendLoopbackPing();
+    void onClearUartLog();
+    void onUartDataReady();
 
     // Network & OTA slots
     void onRenewDhcp();
@@ -68,8 +83,10 @@ private:
     QWidget *createTouchTestTab();
     QWidget *createHardwareControlTab();
     QWidget *createGpioTestTab();
+    QWidget *createUartTab();
     QWidget *createNetworkOtaTab();
     QWidget *createSystemTab();
+    QWidget *createSystemInfoTab();
 
     QString getIpAddress();
     float getCpuTemperature();
@@ -80,6 +97,8 @@ private:
     QString getInstalledOtaVersion();
     void loadOtaServerConfig();
     void saveOtaServerConfig(const QString &url);
+    void loadSleepConfig();
+    void saveSleepConfig(int seconds);
 
     // Top status bar
     QLabel *m_clockLabel;
@@ -109,6 +128,23 @@ private:
     QLabel *m_brightnessValueLabel;
     QPushButton *m_ledToggleBtn;
     bool m_ledState;
+
+    // Sleep Timer widgets
+    QLabel *m_sleepStatusLabel;
+    QSpinBox *m_sleepTimeoutSpin;
+
+    // UART widgets
+    int m_uartFd;
+    QSocketNotifier *m_uartNotifier;
+    QComboBox *m_uartPortCombo;
+    QComboBox *m_uartBaudCombo;
+    QPushButton *m_uartOpenCloseBtn;
+    QLabel *m_uartStatusLabel;
+    QLabel *m_uartPinRefLabel;
+    QTextEdit *m_uartLogEdit;
+    QLineEdit *m_uartSendEdit;
+    QComboBox *m_uartEndingCombo;
+    QCheckBox *m_uartAutoScrollCheck;
 
     // GPIO Test tab widgets
     QPushButton *m_led1ToggleBtn;

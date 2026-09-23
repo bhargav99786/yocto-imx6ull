@@ -1,0 +1,15 @@
+[Unit]
+Description=MarknStamp HMI Display Sleep & Touch Wake Daemon
+After=systemd-udev-settle.service hmi-app.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hmi-sleep-daemon
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,102 @@
+#!/bin/sh
+#
+# set-hmi-app: Helper script to set or change the active Qt HMI application
+#
+
+CONF="/etc/hmi-session.conf"
+TARGET_APP="/opt/hmi/bin/app"
+
+usage() {
+    echo "Usage: set-hmi-app [OPTIONS] <path-to-executable>"
+    echo ""
+    echo "Options:"
+    echo "  -c, --copy      Copy the executable to $TARGET_APP (default)"
+    echo "  -l, --link      Symlink the executable to $TARGET_APP"
+    echo "  -s, --status    Show current active HMI application"
+    echo "  -r, --restart   Restart hmi-app service now"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  set-hmi-app /home/root/my_qt_app"
+    echo "  set-hmi-app -s"
+    exit 1
+}
+
+show_status() {
+    echo "=== Current HMI Session Configuration ==="
+    if [ -f "$CONF" ]; then
+        grep -E "^(APP_EXEC|APP_PLATFORM|APP_ARGS)" "$CONF"
+    fi
+    echo ""
+    echo "Target executable: $TARGET_APP"
+    if [ -L "$TARGET_APP" ]; then
+        echo "Status: Symlink -> $(readlink -f "$TARGET_APP")"
+    elif [ -f "$TARGET_APP" ]; then
+        echo "Status: Standalone regular file ($(ls -lh "$TARGET_APP" | awk '{print $5}'))"
+    else
+        echo "Status: NOT FOUND (will fall back to default /usr/bin/hmi-app)"
+    fi
+    echo "Systemd service status: $(systemctl is-active hmi-app 2>/dev/null || echo 'inactive')"
+    exit 0
+}
+
+MODE="copy"
+RESTART=1
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -s|--status)
+            show_status
+            ;;
+        -c|--copy)
+            MODE="copy"
+            shift
+            ;;
+        -l|--link)
+            MODE="link"
+            shift
+            ;;
+        -r|--restart)
+            echo "Restarting hmi-app.service..."
+            systemctl restart hmi-app
+            exit 0
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            SRC_FILE="$1"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$SRC_FILE" ]; then
+    show_status
+fi
+
+if [ ! -f "$SRC_FILE" ]; then
+    echo "Error: File '$SRC_FILE' does not exist." >&2
+    exit 1
+fi
+
+chmod +x "$SRC_FILE"
+
+mkdir -p /opt/hmi/bin
+
+if [ "$MODE" = "copy" ]; then
+    echo "[set-hmi-app] Copying '$SRC_FILE' to '$TARGET_APP'..."
+    cp -f "$SRC_FILE" "$TARGET_APP"
+    chmod +x "$TARGET_APP"
+else
+    echo "[set-hmi-app] Linking '$SRC_FILE' to '$TARGET_APP'..."
+    ln -sf "$(readlink -f "$SRC_FILE")" "$TARGET_APP"
+fi
+
+echo "[set-hmi-app] Successfully configured '$TARGET_APP'."
+
+if [ "$RESTART" -eq 1 ]; then
+    echo "[set-hmi-app] Restarting hmi-app service..."
+    systemctl restart hmi-app
+    echo "[set-hmi-app] Done! Application is now active."
+fi

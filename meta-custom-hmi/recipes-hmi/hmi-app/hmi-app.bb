@@ -26,6 +26,7 @@ SRC_URI = " \
     file://99-goodix.rules \
     file://hmi-session.conf \
     file://hmi-session-launcher \
+    file://set-hmi-app \
     file://touch-calibration.json \
 "
 
@@ -55,6 +56,7 @@ do_install:append() {
 
     install -d ${D}${bindir}
     install -m 0755 ${WORKDIR}/hmi-session-launcher ${D}${bindir}/hmi-session-launcher
+    install -m 0755 ${WORKDIR}/set-hmi-app ${D}${bindir}/set-hmi-app
 
     install -d ${D}/opt/hmi/bin
     ln -sf /usr/bin/hmi-app ${D}/opt/hmi/bin/app
@@ -66,6 +68,7 @@ do_install:append() {
 FILES:${PN} += " \
     ${bindir}/hmi-app \
     ${bindir}/hmi-session-launcher \
+    ${bindir}/set-hmi-app \
     ${sysconfdir}/hmi-session.conf \
     ${sysconfdir}/touch-calibration.json \
     ${sysconfdir}/init.d/hmi-app \

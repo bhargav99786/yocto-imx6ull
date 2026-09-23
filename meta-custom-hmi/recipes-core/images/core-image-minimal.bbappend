@@ -14,4 +14,5 @@ IMAGE_INSTALL:append = " \
     ota-agent \
     confirm-boot \
     touch-test \
+    hmi-sleep \
 "

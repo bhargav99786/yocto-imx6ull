@@ -21,6 +21,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScrollArea>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QScrollBar>
+
+#include <termios.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -33,6 +41,19 @@ MainWindow::MainWindow(QWidget *parent)
     , m_otaProgressTimer(nullptr)
     , m_pingProcess(nullptr)
     , m_netManager(nullptr)
+    , m_sleepStatusLabel(nullptr)
+    , m_sleepTimeoutSpin(nullptr)
+    , m_uartFd(-1)
+    , m_uartNotifier(nullptr)
+    , m_uartPortCombo(nullptr)
+    , m_uartBaudCombo(nullptr)
+    , m_uartOpenCloseBtn(nullptr)
+    , m_uartStatusLabel(nullptr)
+    , m_uartPinRefLabel(nullptr)
+    , m_uartLogEdit(nullptr)
+    , m_uartSendEdit(nullptr)
+    , m_uartEndingCombo(nullptr)
+    , m_uartAutoScrollCheck(nullptr)
 {
     m_blinkTimer = new QTimer(this);
     connect(m_blinkTimer, &QTimer::timeout, this, &MainWindow::onBlinkTimeout);
@@ -53,6 +74,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_netManager, &QNetworkAccessManager::finished, this, &MainWindow::onOtaVersionReply);
 
     loadOtaServerConfig();
+    loadSleepConfig();
 
     setupUi();
 
@@ -65,6 +87,15 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (m_uartFd >= 0) {
+        if (m_uartNotifier) {
+            m_uartNotifier->setEnabled(false);
+            delete m_uartNotifier;
+            m_uartNotifier = nullptr;
+        }
+        ::close(m_uartFd);
+        m_uartFd = -1;
+    }
 }
 
 void MainWindow::setupUi()
@@ -109,7 +140,7 @@ void MainWindow::setupUi()
     m_tabWidget = new QTabWidget(this);
     m_tabWidget->setStyleSheet(
         "QTabWidget::pane { border: 1px solid #233242; background: #111822; border-radius: 8px; }"
-        "QTabBar::tab { background: #16202c; color: #8b949e; padding: 9px 16px; font-size: 13px; font-weight: bold; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 3px; }"
+        "QTabBar::tab { background: #16202c; color: #8b949e; padding: 7px 10px; font-size: 12px; font-weight: bold; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }"
         "QTabBar::tab:selected { background: #1f2d3d; color: #00d2ff; border-bottom: 3px solid #00d2ff; }"
         "QTabBar::tab:hover { background: #1b2636; color: #e6edf3; }"
     );
@@ -117,10 +148,12 @@ void MainWindow::setupUi()
 
     m_tabWidget->addTab(createDashboardTab(), "Dashboard");
     m_tabWidget->addTab(createTouchTestTab(), "Touch Test");
-    m_tabWidget->addTab(createHardwareControlTab(), "Hardware && Display");
+    m_tabWidget->addTab(createHardwareControlTab(), "Display && Sleep");
     m_tabWidget->addTab(createGpioTestTab(), "GPIO Test");
+    m_tabWidget->addTab(createUartTab(), "UART Console");
     m_tabWidget->addTab(createNetworkOtaTab(), "Network && OTA");
-    m_tabWidget->addTab(createSystemTab(), "System && Power");
+    m_tabWidget->addTab(createSystemInfoTab(), "Paths && Pinout");
+    m_tabWidget->addTab(createSystemTab(), "Power");
 
     mainLayout->addWidget(m_tabWidget);
 }
@@ -333,6 +366,74 @@ QWidget *MainWindow::createHardwareControlTab()
     blLayout->addLayout(presetRow);
     blLayout->addStretch();
 
+    // Sleep Inactivity & Display Blanking Box
+    QGroupBox *sleepBox = new QGroupBox("Display Inactivity Sleep & Touch Wake", tab);
+    sleepBox->setStyleSheet(
+        "QGroupBox { font-size: 14px; font-weight: bold; color: #ff9800; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 14px 12px 12px 12px; background-color: #141c26; }"
+        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
+    );
+    QVBoxLayout *sleepLayout = new QVBoxLayout(sleepBox);
+    sleepLayout->setAlignment(Qt::AlignTop);
+    sleepLayout->setSpacing(10);
+
+    m_sleepStatusLabel = new QLabel("Timeout: Loading /etc/hmi-sleep.conf...", sleepBox);
+    m_sleepStatusLabel->setStyleSheet("font-size: 14px; color: #ffffff; font-weight: bold;");
+    sleepLayout->addWidget(m_sleepStatusLabel);
+
+    // Quick presets
+    QHBoxLayout *presetSleepRow = new QHBoxLayout();
+    presetSleepRow->setSpacing(6);
+    auto makeSleepPreset = [this, presetSleepRow, sleepBox](const QString &label, int secs) {
+        QPushButton *btn = new QPushButton(label, sleepBox);
+        btn->setFixedHeight(32);
+        btn->setStyleSheet("background-color: #1f2d3d; color: #ffb74d; font-weight: bold; font-size: 11px; border: 1px solid #2a3b4c; border-radius: 6px;");
+        connect(btn, &QPushButton::clicked, [this, secs]() {
+            onSleepPresetClicked(secs);
+        });
+        presetSleepRow->addWidget(btn);
+    };
+    makeSleepPreset("Always On", 0);
+    makeSleepPreset("30s", 30);
+    makeSleepPreset("1 min", 60);
+    makeSleepPreset("2 min", 120);
+    makeSleepPreset("5 min", 300);
+    sleepLayout->addLayout(presetSleepRow);
+
+    // Custom spinbox & apply
+    QHBoxLayout *customSleepRow = new QHBoxLayout();
+    customSleepRow->setSpacing(8);
+    QLabel *customLbl = new QLabel("Custom Timeout:", sleepBox);
+    customLbl->setStyleSheet("font-size: 12px; color: #8b949e; font-weight: bold;");
+    m_sleepTimeoutSpin = new QSpinBox(sleepBox);
+    m_sleepTimeoutSpin->setRange(0, 3600);
+    m_sleepTimeoutSpin->setValue(120);
+    m_sleepTimeoutSpin->setFixedHeight(32);
+    m_sleepTimeoutSpin->setSuffix(" sec");
+    m_sleepTimeoutSpin->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: bold;");
+
+    QPushButton *applySleepBtn = new QPushButton("Save Config", sleepBox);
+    applySleepBtn->setFixedHeight(32);
+    applySleepBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-weight: bold; font-size: 12px; border-radius: 6px;");
+    connect(applySleepBtn, &QPushButton::clicked, this, &MainWindow::onApplyCustomSleep);
+
+    customSleepRow->addWidget(customLbl);
+    customSleepRow->addWidget(m_sleepTimeoutSpin, 1);
+    customSleepRow->addWidget(applySleepBtn);
+    sleepLayout->addLayout(customSleepRow);
+
+    // Sleep Now test button
+    QPushButton *sleepNowBtn = new QPushButton("🌙 Sleep Screen Now (Test Touch Wake)", sleepBox);
+    sleepNowBtn->setFixedHeight(34);
+    sleepNowBtn->setStyleSheet("background-color: #283593; color: #80d8ff; font-weight: bold; font-size: 12px; border: 1px solid #3949ab; border-radius: 6px;");
+    connect(sleepNowBtn, &QPushButton::clicked, this, &MainWindow::onSleepNowClicked);
+    sleepLayout->addWidget(sleepNowBtn);
+
+    QLabel *sleepInfo = new QLabel("Display powers off after inactivity. Any touch on screen instantly wakes it up.\nWrites to /etc/hmi-sleep.conf (hmi-sleep-daemon reloads live without restart).", sleepBox);
+    sleepInfo->setStyleSheet("font-size: 11px; color: #78909c;");
+    sleepInfo->setWordWrap(true);
+    sleepLayout->addWidget(sleepInfo);
+    sleepLayout->addStretch();
+
     // GPIO & LED Box
     QGroupBox *gpioBox = new QGroupBox("Industrial I/O && Relay Simulation", tab);
     gpioBox->setStyleSheet(
@@ -348,7 +449,7 @@ QWidget *MainWindow::createHardwareControlTab()
     gpioLayout->addWidget(gpioDesc);
 
     m_ledToggleBtn = new QPushButton("Carrier Board LED / Relay: OFF", gpioBox);
-    m_ledToggleBtn->setFixedHeight(50);
+    m_ledToggleBtn->setFixedHeight(46);
     m_ledToggleBtn->setStyleSheet("background-color: #21262d; color: #8b949e; font-size: 14px; font-weight: bold; border-radius: 8px; border: 2px solid #30363d;");
     connect(m_ledToggleBtn, &QPushButton::clicked, this, [this]() {
         m_ledState = !m_ledState;
@@ -364,7 +465,8 @@ QWidget *MainWindow::createHardwareControlTab()
     gpioLayout->addStretch();
 
     grid->addWidget(blBox, 0, 0);
-    grid->addWidget(gpioBox, 0, 1);
+    grid->addWidget(sleepBox, 0, 1);
+    grid->addWidget(gpioBox, 1, 0, 1, 2);
 
     return tab;
 }
@@ -616,6 +718,353 @@ QWidget *MainWindow::createSystemTab()
 
     vLayout->addWidget(powerBox);
     vLayout->addStretch();
+
+    return tab;
+}
+
+QWidget *MainWindow::createUartTab()
+{
+    QWidget *tab = new QWidget(this);
+    QVBoxLayout *vLayout = new QVBoxLayout(tab);
+    vLayout->setContentsMargins(12, 10, 12, 10);
+    vLayout->setSpacing(8);
+
+    // ================= TOP CONFIGURATION PANEL =================
+    QFrame *topFrame = new QFrame(tab);
+    topFrame->setStyleSheet("background-color: #141c26; border: 1px solid #233242; border-radius: 8px; padding: 6px;");
+    QHBoxLayout *topLayout = new QHBoxLayout(topFrame);
+    topLayout->setContentsMargins(8, 4, 8, 4);
+    topLayout->setSpacing(10);
+
+    QLabel *portLbl = new QLabel("Serial Port:", topFrame);
+    portLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #00d2ff;");
+    m_uartPortCombo = new QComboBox(topFrame);
+    m_uartPortCombo->addItem("UART2 (/dev/ttymxc1) - P17 Pins 32 RX, 34 TX", "/dev/ttymxc1");
+    m_uartPortCombo->addItem("UART3 (/dev/ttymxc2) - P17 Pins 31 RX, 33 TX", "/dev/ttymxc2");
+    m_uartPortCombo->addItem("UART4 (/dev/ttymxc3) - P17 Pins 26 RX, 28 TX", "/dev/ttymxc3");
+    m_uartPortCombo->addItem("UART5 (/dev/ttymxc4) - P17 Pins 25 RX, 27 TX", "/dev/ttymxc4");
+    m_uartPortCombo->addItem("UART1 (/dev/ttymxc0) - Debug Console", "/dev/ttymxc0");
+    m_uartPortCombo->setFixedHeight(32);
+    m_uartPortCombo->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: bold;");
+
+    QLabel *baudLbl = new QLabel("Baud:", topFrame);
+    baudLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #00d2ff;");
+    m_uartBaudCombo = new QComboBox(topFrame);
+    m_uartBaudCombo->addItems(QStringList() << "9600" << "19200" << "38400" << "57600" << "115200" << "230400" << "460800" << "921600");
+    m_uartBaudCombo->setCurrentText("115200");
+    m_uartBaudCombo->setFixedWidth(90);
+    m_uartBaudCombo->setFixedHeight(32);
+    m_uartBaudCombo->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 6px; font-size: 11px; font-weight: bold;");
+
+    m_uartOpenCloseBtn = new QPushButton("Open Port", topFrame);
+    m_uartOpenCloseBtn->setFixedHeight(32);
+    m_uartOpenCloseBtn->setFixedWidth(100);
+    m_uartOpenCloseBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-weight: bold; font-size: 12px; border-radius: 6px;");
+    connect(m_uartOpenCloseBtn, &QPushButton::clicked, this, &MainWindow::onOpenCloseUart);
+
+    m_uartStatusLabel = new QLabel("Status: Closed", topFrame);
+    m_uartStatusLabel->setStyleSheet("color: #8b949e; font-size: 12px; font-weight: bold;");
+
+    topLayout->addWidget(portLbl);
+    topLayout->addWidget(m_uartPortCombo, 2);
+    topLayout->addWidget(baudLbl);
+    topLayout->addWidget(m_uartBaudCombo);
+    topLayout->addWidget(m_uartOpenCloseBtn);
+    topLayout->addWidget(m_uartStatusLabel, 1);
+    vLayout->addWidget(topFrame);
+
+    // ================= HARDWARE PIN REFERENCE CALLOUT =================
+    m_uartPinRefLabel = new QLabel(tab);
+    m_uartPinRefLabel->setStyleSheet("background-color: #0d131a; color: #ffb74d; border: 1px solid #233242; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: bold;");
+    connect(m_uartPortCombo, static_cast<void(QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, &MainWindow::onUartPortChanged);
+    onUartPortChanged(0);
+    vLayout->addWidget(m_uartPinRefLabel);
+
+    // ================= CONSOLE LOG CONTROLS =================
+    QHBoxLayout *ctrlRow = new QHBoxLayout();
+    QLabel *logLbl = new QLabel("UART Console (Raw Serial Stream):", tab);
+    logLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #e6edf3;");
+
+    QPushButton *pingBtn = new QPushButton("Send Loopback Ping", tab);
+    pingBtn->setFixedHeight(28);
+    pingBtn->setStyleSheet("background-color: #e65100; color: #ffffff; font-size: 11px; font-weight: bold; border-radius: 4px; padding: 0 10px;");
+    connect(pingBtn, &QPushButton::clicked, this, &MainWindow::onSendLoopbackPing);
+
+    QPushButton *clearBtn = new QPushButton("Clear Console", tab);
+    clearBtn->setFixedHeight(28);
+    clearBtn->setStyleSheet("background-color: #37474f; color: #cfd8dc; font-size: 11px; font-weight: bold; border-radius: 4px; padding: 0 10px;");
+    connect(clearBtn, &QPushButton::clicked, this, &MainWindow::onClearUartLog);
+
+    m_uartAutoScrollCheck = new QCheckBox("Auto-scroll", tab);
+    m_uartAutoScrollCheck->setChecked(true);
+    m_uartAutoScrollCheck->setStyleSheet("QCheckBox { color: #80cbc4; font-size: 11px; font-weight: bold; }");
+
+    ctrlRow->addWidget(logLbl);
+    ctrlRow->addStretch();
+    ctrlRow->addWidget(pingBtn);
+    ctrlRow->addWidget(clearBtn);
+    ctrlRow->addWidget(m_uartAutoScrollCheck);
+    vLayout->addLayout(ctrlRow);
+
+    // ================= TERMINAL TEXT EDIT =================
+    m_uartLogEdit = new QTextEdit(tab);
+    m_uartLogEdit->setReadOnly(true);
+    m_uartLogEdit->setStyleSheet(
+        "QTextEdit { background-color: #0b0f14; color: #00d2ff; font-family: monospace; font-size: 12px; border: 1px solid #233242; border-radius: 6px; padding: 6px; }"
+    );
+    vLayout->addWidget(m_uartLogEdit, 1);
+
+    // ================= TRANSMIT / SEND ROW =================
+    QHBoxLayout *sendRow = new QHBoxLayout();
+    sendRow->setSpacing(8);
+
+    QLabel *sendLbl = new QLabel("TX:", tab);
+    sendLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #69f0ae;");
+
+    m_uartSendEdit = new QLineEdit(tab);
+    m_uartSendEdit->setFixedHeight(34);
+    m_uartSendEdit->setPlaceholderText("Type data to transmit over UART (Press Enter to Send)...");
+    m_uartSendEdit->setStyleSheet("background-color: #16202c; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 8px; font-size: 12px;");
+    connect(m_uartSendEdit, &QLineEdit::returnPressed, this, &MainWindow::onSendUartData);
+
+    m_uartEndingCombo = new QComboBox(tab);
+    m_uartEndingCombo->addItem("CR+LF (\\r\\n)");
+    m_uartEndingCombo->addItem("LF (\\n)");
+    m_uartEndingCombo->addItem("None");
+    m_uartEndingCombo->setFixedHeight(34);
+    m_uartEndingCombo->setFixedWidth(110);
+    m_uartEndingCombo->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 6px; font-size: 11px; font-weight: bold;");
+
+    QPushButton *sendBtn = new QPushButton("Send", tab);
+    sendBtn->setFixedHeight(34);
+    sendBtn->setFixedWidth(80);
+    sendBtn->setStyleSheet("background-color: #00897b; color: #ffffff; font-weight: bold; font-size: 12px; border-radius: 6px;");
+    connect(sendBtn, &QPushButton::clicked, this, &MainWindow::onSendUartData);
+
+    sendRow->addWidget(sendLbl);
+    sendRow->addWidget(m_uartSendEdit, 1);
+    sendRow->addWidget(m_uartEndingCombo);
+    sendRow->addWidget(sendBtn);
+    vLayout->addLayout(sendRow);
+
+    return tab;
+}
+
+QWidget *MainWindow::createSystemInfoTab()
+{
+    QWidget *tab = new QWidget(this);
+    QVBoxLayout *tabLayout = new QVBoxLayout(tab);
+    tabLayout->setContentsMargins(8, 8, 8, 8);
+
+    QScrollArea *scrollArea = new QScrollArea(tab);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setStyleSheet("QScrollArea { border: none; background: transparent; }");
+
+    QWidget *container = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(container);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(14);
+
+    auto makeCard = [](const QString &title, const QString &accentCol) -> QGroupBox* {
+        QGroupBox *box = new QGroupBox(title);
+        box->setStyleSheet(QString(
+            "QGroupBox { font-size: 13px; font-weight: bold; color: %1; border: 1px solid #233242; border-radius: 8px; margin-top: 6px; padding: 12px 10px 10px 10px; background-color: #141c26; }"
+            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px; }"
+        ).arg(accentCol));
+        return box;
+    };
+
+    auto addPathRow = [](QGridLayout *g, int row, const QString &item, const QString &path, const QString &desc) {
+        QLabel *lblItem = new QLabel(item);
+        lblItem->setStyleSheet("font-size: 12px; font-weight: bold; color: #ffffff;");
+        QLabel *lblPath = new QLabel(path);
+        lblPath->setStyleSheet("font-size: 11px; font-family: monospace; color: #00d2ff; background: #0d1117; padding: 3px 6px; border-radius: 4px; border: 1px solid #21262d;");
+        lblPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        QLabel *lblDesc = new QLabel(desc);
+        lblDesc->setStyleSheet("font-size: 11px; color: #8b949e;");
+        lblDesc->setWordWrap(true);
+
+        g->addWidget(lblItem, row, 0);
+        g->addWidget(lblPath, row, 1);
+        g->addWidget(lblDesc, row, 2);
+    };
+
+    // ================= CARD 1: SYSTEM ARCHITECTURE & FILE PATHS =================
+    QGroupBox *pathsBox = makeCard("System Architecture & Configuration Paths", "#00d2ff");
+    QVBoxLayout *pathsLayout = new QVBoxLayout(pathsBox);
+    pathsLayout->setSpacing(10);
+
+    // Section A: App & Services
+    QLabel *appSecLbl = new QLabel("1. Qt Application & Service Launcher");
+    appSecLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #81c784;");
+    pathsLayout->addWidget(appSecLbl);
+
+    QGridLayout *appGrid = new QGridLayout();
+    appGrid->setSpacing(6);
+    addPathRow(appGrid, 0, "App Executable", "/opt/hmi/bin/app", "Main running Qt HMI binary (executed by launcher)");
+    addPathRow(appGrid, 1, "App Switcher", "/usr/bin/set-hmi-app", "Helper CLI to deploy/swap Qt apps: set-hmi-app <binary>");
+    addPathRow(appGrid, 2, "Session Launcher", "/usr/bin/hmi-session-launcher", "Configures environment & executes /opt/hmi/bin/app");
+    addPathRow(appGrid, 3, "Session Config", "/etc/hmi-session.conf", "Sets APP_EXEC, QT_QPA_PLATFORM, QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS");
+    addPathRow(appGrid, 4, "Systemd Service", "/lib/systemd/system/hmi-app.service", "Lifecycle service: systemctl restart hmi-app");
+    pathsLayout->addLayout(appGrid);
+
+    pathsLayout->addSpacing(6);
+
+    // Section B: Sleep & Touch
+    QLabel *sleepSecLbl = new QLabel("2. Touch-Wake Sleep Mode & Display Control");
+    sleepSecLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #ffb74d;");
+    pathsLayout->addWidget(sleepSecLbl);
+
+    QGridLayout *sleepGrid = new QGridLayout();
+    sleepGrid->setSpacing(6);
+    addPathRow(sleepGrid, 0, "Sleep Daemon", "/usr/bin/hmi-sleep-daemon", "Background C daemon monitoring touch activity & blanking display");
+    addPathRow(sleepGrid, 1, "Sleep Config", "/etc/hmi-sleep.conf", "Inactivity timeout in seconds (SLEEP_TIMEOUT_SEC=120, 0=off)");
+    addPathRow(sleepGrid, 2, "Sleep Service", "/lib/systemd/system/hmi-sleep.service", "Daemon service: systemctl restart hmi-sleep");
+    addPathRow(sleepGrid, 3, "Touch Device", "/dev/input/touchscreen0", "Goodix capacitive touch evdev coordinate input node");
+    addPathRow(sleepGrid, 4, "Touch Calibration", "/etc/pointercal", "Touchscreen calibration transformation matrix coefficients");
+    addPathRow(sleepGrid, 5, "FB Blank Sysfs", "/sys/class/graphics/fb0/blank", "1 = blank screen, 0 = unblank screen");
+    addPathRow(sleepGrid, 6, "Backlight Sysfs", "/sys/class/backlight/backlight/brightness", "LCD backlight intensity level (1 to 7)");
+    pathsLayout->addLayout(sleepGrid);
+
+    pathsLayout->addSpacing(6);
+
+    // Section C: Networking
+    QLabel *netSecLbl = new QLabel("3. Dual Ethernet Network Configuration");
+    netSecLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #64b5f6;");
+    pathsLayout->addWidget(netSecLbl);
+
+    QGridLayout *netGrid = new QGridLayout();
+    netGrid->setSpacing(6);
+    addPathRow(netGrid, 0, "ENET1 (eth0)", "/etc/systemd/network/10-eth0.network", "Static IP: 192.168.1.100/24 (Yocto: meta-custom-hmi/recipes-core/systemd/)");
+    addPathRow(netGrid, 1, "ENET2 (eth1)", "/etc/systemd/network/11-eth1.network", "Static IP: 192.168.2.100/24 (Yocto: meta-custom-hmi/recipes-core/systemd/)");
+    addPathRow(netGrid, 2, "Networkd Service", "systemctl restart systemd-networkd", "Reload networking configs on runtime target");
+    pathsLayout->addLayout(netGrid);
+
+    pathsLayout->addSpacing(6);
+
+    // Section D: Dual-Boot OTA
+    QLabel *otaSecLbl = new QLabel("4. Dual-Boot OTA & Partition Architecture");
+    otaSecLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #ba68c8;");
+    pathsLayout->addWidget(otaSecLbl);
+
+    QGridLayout *otaGrid = new QGridLayout();
+    otaGrid->setSpacing(6);
+    addPathRow(otaGrid, 0, "OTA Agent", "/usr/bin/ota-update-agent", "Automated background update polling agent");
+    addPathRow(otaGrid, 1, "OTA Server URL", "/etc/ota-server.conf", "Target endpoint configuration (e.g., http://<ip>:8000)");
+    addPathRow(otaGrid, 2, "OTA Progress", "/tmp/ota_progress.json", "JSON state file tracking download and flashing percentage");
+    addPathRow(otaGrid, 3, "SWUpdate Tool", "/usr/bin/swupdate", "Industrial A/B partition installer (-m -M flag integration)");
+    addPathRow(otaGrid, 4, "Hardware Rev", "/etc/hwrevision", "Hardware board revision string (board 1.0)");
+    addPathRow(otaGrid, 5, "U-Boot Initial Env", "/etc/u-boot-initial-env", "Default U-Boot environment definition for fw_printenv");
+    addPathRow(otaGrid, 6, "U-Boot Env Tools", "/usr/bin/fw_printenv, /usr/bin/fw_setenv", "Read and write U-Boot environment variables (mmcblk0 Bank A/B)");
+    pathsLayout->addLayout(otaGrid);
+
+    layout->addWidget(pathsBox);
+
+    // ================= CARD 2: P17 HARDWARE PINOUT TABLE =================
+    QGroupBox *pinoutBox = makeCard("P17 Expansion Header (40-Pin 2x20 2.54mm Pinout Reference)", "#4caf50");
+    QVBoxLayout *pinoutLayout = new QVBoxLayout(pinoutBox);
+
+    QLabel *pinSub = new QLabel("Cross-reference of all P17 pins to SoC pads, Linux device drivers, and GPIO numbers:");
+    pinSub->setStyleSheet("font-size: 11px; color: #8b949e;");
+    pinoutLayout->addWidget(pinSub);
+
+    QTableWidget *table = new QTableWidget(pinoutBox);
+    table->setColumnCount(5);
+    table->setHorizontalHeaderLabels(QStringList() << "P17 Pin" << "Board Label" << "SoC Pad" << "Function / Linux Device" << "Sysfs GPIO");
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    table->setStyleSheet(
+        "QTableWidget { background-color: #0b0f14; gridline-color: #1e2c3c; border: 1px solid #233242; font-size: 11px; color: #e6edf3; }"
+        "QHeaderView::section { background-color: #16202c; color: #00d2ff; font-weight: bold; border: 1px solid #233242; padding: 4px; }"
+    );
+    table->verticalHeader()->setVisible(false);
+    table->setMinimumHeight(380);
+
+    struct PinDef {
+        int pin;
+        const char *label;
+        const char *soc;
+        const char *func;
+        const char *gpio;
+        const char *color;
+    };
+
+    static const PinDef p17Pins[] = {
+        { 1,  "GEN_5V",      "—",            "5V Power Output",                  "—",                    "#ef5350" },
+        { 2,  "GEN_5V",      "—",            "5V Power Output",                  "—",                    "#ef5350" },
+        { 3,  "GEN_3V3",     "—",            "3.3V Power Output",                "—",                    "#ffb74d" },
+        { 4,  "GEN_3V3",     "—",            "3.3V Power Output",                "—",                    "#ffb74d" },
+        { 5,  "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 6,  "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 7,  "I2C1_SCL",    "CSI_PIXCLK",   "I2C1 Clock (/dev/i2c-0)",          "GPIO 114 (GPIO4_IO18)","#ce93d8" },
+        { 8,  "I2C2_SCL",    "CSI_HSYNC",    "I2C2 Clock (/dev/i2c-1)",          "GPIO 116 (GPIO4_IO20)","#ce93d8" },
+        { 9,  "I2C1_SDA",    "CSI_MCLK",     "I2C1 Data (/dev/i2c-0)",           "GPIO 113 (GPIO4_IO17)","#ce93d8" },
+        { 10, "I2C2_SDA",    "CSI_VSYNC",    "I2C2 Data (/dev/i2c-1)",           "GPIO 115 (GPIO4_IO19)","#ce93d8" },
+        { 11, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 12, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 13, "SPI1_MISO",   "CSI_DATA07",   "ECSPI1 MISO (/dev/spidev0.0)",     "GPIO 124 (GPIO4_IO28)","#81c784" },
+        { 14, "SPI1_MOSI",   "CSI_DATA06",   "ECSPI1 MOSI (/dev/spidev0.0)",     "GPIO 123 (GPIO4_IO27)","#81c784" },
+        { 15, "SPI1_CS",     "CSI_DATA05",   "ECSPI1 CS (Active GPIO CS)",       "GPIO 122 (GPIO4_IO26)","#81c784" },
+        { 16, "SPI1_SCLK",   "CSI_DATA04",   "ECSPI1 Clock (/dev/spidev0.0)",    "GPIO 121 (GPIO4_IO25)","#81c784" },
+        { 17, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 18, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 19, "SPI2_MISO",   "CSI_DATA03",   "ECSPI2 MISO (/dev/spidev1.0)",     "GPIO 120 (GPIO4_IO24)","#81c784" },
+        { 20, "SPI2_MOSI",   "CSI_DATA02",   "ECSPI2 MOSI (/dev/spidev1.0)",     "GPIO 119 (GPIO4_IO23)","#81c784" },
+        { 21, "SPI2_CS",     "CSI_DATA01",   "ECSPI2 CS (Active GPIO CS)",       "GPIO 118 (GPIO4_IO22)","#81c784" },
+        { 22, "SPI2_SCLK",   "CSI_DATA00",   "ECSPI2 Clock (/dev/spidev1.0)",    "GPIO 117 (GPIO4_IO21)","#81c784" },
+        { 23, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 24, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 25, "UART5_RXD",   "UART5_RX_DATA","UART5 RX (/dev/ttymxc4)",          "GPIO 31 (GPIO1_IO31)", "#4fc3f7" },
+        { 26, "UART4_RXD",   "UART4_RX_DATA","UART4 RX (/dev/ttymxc3)",          "GPIO 29 (GPIO1_IO29)", "#4fc3f7" },
+        { 27, "UART5_TXD",   "UART5_TX_DATA","UART5 TX (/dev/ttymxc4)",          "GPIO 30 (GPIO1_IO30)", "#4fc3f7" },
+        { 28, "UART4_TXD",   "UART4_TX_DATA","UART4 TX (/dev/ttymxc3)",          "GPIO 28 (GPIO1_IO28)", "#4fc3f7" },
+        { 29, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 30, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 31, "UART3_RXD",   "UART3_RX_DATA","UART3 RX (/dev/ttymxc2)",          "GPIO 25 (GPIO1_IO25)", "#4fc3f7" },
+        { 32, "UART2_RXD",   "UART2_RX_DATA","UART2 RX (/dev/ttymxc1)",          "GPIO 21 (GPIO1_IO21)", "#4fc3f7" },
+        { 33, "UART3_TXD",   "UART3_TX_DATA","UART3 TX (/dev/ttymxc2)",          "GPIO 24 (GPIO1_IO24)", "#4fc3f7" },
+        { 34, "UART2_TXD",   "UART2_TX_DATA","UART2 TX (/dev/ttymxc1)",          "GPIO 20 (GPIO1_IO20)", "#4fc3f7" },
+        { 35, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 36, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
+        { 37, "GEN_3V3",     "—",            "3.3V Power Output",                "—",                    "#ffb74d" },
+        { 38, "GEN_3V3",     "—",            "3.3V Power Output",                "—",                    "#ffb74d" },
+        { 39, "GEN_5V",      "—",            "5V Power Output",                  "—",                    "#ef5350" },
+        { 40, "GEN_5V",      "—",            "5V Power Output",                  "—",                    "#ef5350" }
+    };
+
+    int numPins = sizeof(p17Pins) / sizeof(p17Pins[0]);
+    table->setRowCount(numPins);
+
+    for (int i = 0; i < numPins; ++i) {
+        const PinDef &p = p17Pins[i];
+
+        QTableWidgetItem *itemPin = new QTableWidgetItem(QString::number(p.pin));
+        itemPin->setTextAlignment(Qt::AlignCenter);
+
+        QTableWidgetItem *itemLabel = new QTableWidgetItem(p.label);
+        itemLabel->setForeground(QColor(p.color));
+        itemLabel->setFont(QFont("sans-serif", 10, QFont::Bold));
+
+        QTableWidgetItem *itemSoc = new QTableWidgetItem(p.soc);
+        QTableWidgetItem *itemFunc = new QTableWidgetItem(p.func);
+        QTableWidgetItem *itemGpio = new QTableWidgetItem(p.gpio);
+
+        table->setItem(i, 0, itemPin);
+        table->setItem(i, 1, itemLabel);
+        table->setItem(i, 2, itemSoc);
+        table->setItem(i, 3, itemFunc);
+        table->setItem(i, 4, itemGpio);
+    }
+
+    pinoutLayout->addWidget(table);
+    layout->addWidget(pinoutBox);
+
+    scrollArea->setWidget(container);
+    tabLayout->addWidget(scrollArea);
 
     return tab;
 }
@@ -1400,5 +1849,269 @@ void MainWindow::updateOtaProgress()
     }
 }
 
+// ============================================================
+//                   SLEEP TIMER CONFIG
+// ============================================================
 
+void MainWindow::loadSleepConfig()
+{
+    int secs = 120;
+    QFile f("/etc/hmi-sleep.conf");
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&f);
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (line.startsWith("SLEEP_TIMEOUT_SEC=")) {
+                bool ok = false;
+                int val = line.section('=', 1, 1).trimmed().toInt(&ok);
+                if (ok) secs = val;
+                break;
+            }
+        }
+        f.close();
+    }
+    if (m_sleepTimeoutSpin) {
+        m_sleepTimeoutSpin->setValue(secs);
+    }
+    if (m_sleepStatusLabel) {
+        if (secs == 0) {
+            m_sleepStatusLabel->setText("Sleep Timeout: Always ON (Disabled)");
+        } else {
+            m_sleepStatusLabel->setText(QString("Sleep Timeout: %1 seconds (%2 min)").arg(secs).arg(secs / 60.0, 0, 'f', 1));
+        }
+    }
+}
 
+void MainWindow::saveSleepConfig(int seconds)
+{
+    QFile f("/etc/hmi-sleep.conf");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream out(&f);
+        out << QString("SLEEP_TIMEOUT_SEC=%1\n").arg(seconds);
+        f.close();
+    }
+    if (m_sleepTimeoutSpin) {
+        m_sleepTimeoutSpin->setValue(seconds);
+    }
+    if (m_sleepStatusLabel) {
+        if (seconds == 0) {
+            m_sleepStatusLabel->setText("Sleep Timeout: Always ON (Disabled)");
+        } else {
+            m_sleepStatusLabel->setText(QString("Sleep Timeout: %1 seconds (Saved live!)").arg(seconds));
+        }
+    }
+}
+
+void MainWindow::onSleepPresetClicked(int seconds)
+{
+    saveSleepConfig(seconds);
+}
+
+void MainWindow::onApplyCustomSleep()
+{
+    if (m_sleepTimeoutSpin) {
+        saveSleepConfig(m_sleepTimeoutSpin->value());
+    }
+}
+
+void MainWindow::onSleepNowClicked()
+{
+    QFile f("/sys/class/graphics/fb0/blank");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QTextStream out(&f);
+        out << "1";
+        f.close();
+    }
+    QFile fb("/sys/class/backlight/backlight/bl_power");
+    if (fb.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QTextStream out(&fb);
+        out << "1";
+        fb.close();
+    }
+}
+
+// ============================================================
+//                   UART CONSOLE SLOTS
+// ============================================================
+
+void MainWindow::onUartPortChanged(int index)
+{
+    if (!m_uartPinRefLabel || !m_uartPortCombo) return;
+    QString dev = m_uartPortCombo->itemData(index).toString();
+    if (dev == "/dev/ttymxc1") {
+        m_uartPinRefLabel->setText("📌 UART2 (/dev/ttymxc1) on P17 Header: RX = Pin 32 | TX = Pin 34 | GND = Pin 30/35 | 3.3V TTL\n💡 Loopback Test: Place jumper wire between P17 Pin 32 and Pin 34, then click 'Send Loopback Ping'.");
+    } else if (dev == "/dev/ttymxc2") {
+        m_uartPinRefLabel->setText("📌 UART3 (/dev/ttymxc2) on P17 Header: RX = Pin 31 | TX = Pin 33 | GND = Pin 30/35 | 3.3V TTL\n💡 Loopback Test: Place jumper wire between P17 Pin 31 and Pin 33, then click 'Send Loopback Ping'.");
+    } else if (dev == "/dev/ttymxc3") {
+        m_uartPinRefLabel->setText("📌 UART4 (/dev/ttymxc3) on P17 Header: RX = Pin 26 | TX = Pin 28 | GND = Pin 24/29 | 3.3V TTL\n💡 Loopback Test: Place jumper wire between P17 Pin 26 and Pin 28, then click 'Send Loopback Ping'.");
+    } else if (dev == "/dev/ttymxc4") {
+        m_uartPinRefLabel->setText("📌 UART5 (/dev/ttymxc4) on P17 Header: RX = Pin 25 | TX = Pin 27 | GND = Pin 24/29 | 3.3V TTL\n💡 Loopback Test: Place jumper wire between P17 Pin 25 and Pin 27, then click 'Send Loopback Ping'.");
+    } else {
+        m_uartPinRefLabel->setText("📌 UART1 (/dev/ttymxc0): Primary Serial Console on microUSB (J9 connector) @ 115200 8N1.");
+    }
+}
+
+void MainWindow::onOpenCloseUart()
+{
+    if (m_uartFd >= 0) {
+        // Close port
+        if (m_uartNotifier) {
+            m_uartNotifier->setEnabled(false);
+            delete m_uartNotifier;
+            m_uartNotifier = nullptr;
+        }
+        ::close(m_uartFd);
+        m_uartFd = -1;
+
+        m_uartOpenCloseBtn->setText("Open Port");
+        m_uartOpenCloseBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-weight: bold; border-radius: 6px;");
+        m_uartStatusLabel->setText("Status: Port Closed");
+        m_uartStatusLabel->setStyleSheet("color: #8b949e; font-size: 12px; font-weight: bold;");
+        m_uartPortCombo->setEnabled(true);
+        m_uartBaudCombo->setEnabled(true);
+        m_uartLogEdit->append("<span style='color:#ff9800;'>[SYSTEM] Port closed.</span>");
+        return;
+    }
+
+    // Open port
+    QString devPath = m_uartPortCombo->currentData().toString();
+    int baud = m_uartBaudCombo->currentText().toInt();
+    speed_t speed = B115200;
+    switch (baud) {
+        case 9600: speed = B9600; break;
+        case 19200: speed = B19200; break;
+        case 38400: speed = B38400; break;
+        case 57600: speed = B57600; break;
+        case 115200: speed = B115200; break;
+        case 230400: speed = B230400; break;
+        case 460800: speed = B460800; break;
+        case 921600: speed = B921600; break;
+        default: speed = B115200; break;
+    }
+
+    m_uartFd = ::open(devPath.toLocal8Bit().constData(), O_RDWR | O_NOCTTY | O_NDELAY);
+    if (m_uartFd < 0) {
+        m_uartLogEdit->append(QString("<span style='color:#ef5350;'>[ERROR] Failed to open %1: %2</span>").arg(devPath, strerror(errno)));
+        return;
+    }
+
+    fcntl(m_uartFd, F_SETFL, 0);
+
+    struct termios tty;
+    memset(&tty, 0, sizeof(tty));
+    if (tcgetattr(m_uartFd, &tty) != 0) {
+        m_uartLogEdit->append(QString("<span style='color:#ef5350;'>[ERROR] tcgetattr failed: %1</span>").arg(strerror(errno)));
+        ::close(m_uartFd);
+        m_uartFd = -1;
+        return;
+    }
+
+    cfsetospeed(&tty, speed);
+    cfsetispeed(&tty, speed);
+
+    tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+    tty.c_cflag |= (CLOCAL | CREAD);
+    tty.c_cflag &= ~(PARENB | PARODD);
+    tty.c_cflag &= ~CSTOPB;
+    tty.c_cflag &= ~CRTSCTS;
+
+    tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF | IXANY);
+    tty.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+    tty.c_oflag &= ~OPOST;
+
+    tty.c_cc[VMIN] = 0;
+    tty.c_cc[VTIME] = 1;
+
+    if (tcsetattr(m_uartFd, TCSANOW, &tty) != 0) {
+        m_uartLogEdit->append(QString("<span style='color:#ef5350;'>[ERROR] tcsetattr failed: %1</span>").arg(strerror(errno)));
+        ::close(m_uartFd);
+        m_uartFd = -1;
+        return;
+    }
+
+    tcflush(m_uartFd, TCIOFLUSH);
+
+    m_uartNotifier = new QSocketNotifier(m_uartFd, QSocketNotifier::Read, this);
+    connect(m_uartNotifier, &QSocketNotifier::activated, this, &MainWindow::onUartDataReady);
+
+    m_uartOpenCloseBtn->setText("Close Port");
+    m_uartOpenCloseBtn->setStyleSheet("background-color: #d32f2f; color: #ffffff; font-weight: bold; border-radius: 6px;");
+    m_uartStatusLabel->setText(QString("Connected: %1 @ %2 8N1").arg(devPath).arg(baud));
+    m_uartStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px; font-weight: bold;");
+    m_uartPortCombo->setEnabled(false);
+    m_uartBaudCombo->setEnabled(false);
+    m_uartLogEdit->append(QString("<span style='color:#4caf50;'>[SYSTEM] Successfully opened %1 @ %2 baud 8N1</span>").arg(devPath).arg(baud));
+}
+
+void MainWindow::onUartDataReady()
+{
+    if (m_uartFd < 0) return;
+    char buf[512];
+    ssize_t n = ::read(m_uartFd, buf, sizeof(buf) - 1);
+    if (n > 0) {
+        buf[n] = '\0';
+        QString text = QString::fromUtf8(buf, n);
+        QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+        m_uartLogEdit->append(QString("<span style='color:#8b949e;'>[%1] </span><span style='color:#00d2ff; font-weight:bold;'>[RX] </span><span style='color:#ffffff;'>%2</span>")
+            .arg(timeStr, text.toHtmlEscaped()));
+        if (m_uartAutoScrollCheck && m_uartAutoScrollCheck->isChecked()) {
+            m_uartLogEdit->moveCursor(QTextCursor::End);
+        }
+    }
+}
+
+void MainWindow::onSendUartData()
+{
+    if (m_uartFd < 0) {
+        m_uartLogEdit->append("<span style='color:#ef5350;'>[ERROR] Port is closed. Open port first!</span>");
+        return;
+    }
+    QString text = m_uartSendEdit->text();
+    if (text.isEmpty()) return;
+
+    QString ending = m_uartEndingCombo->currentText();
+    QByteArray payload = text.toUtf8();
+    if (ending.contains("CR+LF")) {
+        payload.append("\r\n");
+    } else if (ending.contains("LF")) {
+        payload.append("\n");
+    }
+
+    ssize_t written = ::write(m_uartFd, payload.constData(), payload.size());
+    if (written > 0) {
+        QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+        m_uartLogEdit->append(QString("<span style='color:#8b949e;'>[%1] </span><span style='color:#69f0ae; font-weight:bold;'>[TX] </span><span style='color:#e0e0e0;'>%2</span>")
+            .arg(timeStr, text.toHtmlEscaped()));
+        m_uartSendEdit->clear();
+        if (m_uartAutoScrollCheck && m_uartAutoScrollCheck->isChecked()) {
+            m_uartLogEdit->moveCursor(QTextCursor::End);
+        }
+    } else {
+        m_uartLogEdit->append(QString("<span style='color:#ef5350;'>[ERROR] Write failed: %1</span>").arg(strerror(errno)));
+    }
+}
+
+void MainWindow::onSendLoopbackPing()
+{
+    if (m_uartFd < 0) {
+        m_uartLogEdit->append("<span style='color:#ef5350;'>[ERROR] Open port first before sending loopback ping.</span>");
+        return;
+    }
+    QByteArray ping = "PING_OKMX6ULL\r\n";
+    ssize_t written = ::write(m_uartFd, ping.constData(), ping.size());
+    if (written > 0) {
+        QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+        m_uartLogEdit->append(QString("<span style='color:#8b949e;'>[%1] </span><span style='color:#ffab00; font-weight:bold;'>[PING] </span><span style='color:#fff8e1;'>Sent PING_OKMX6ULL (Ensure RX & TX pins are connected for echo!)</span>")
+            .arg(timeStr));
+        if (m_uartAutoScrollCheck && m_uartAutoScrollCheck->isChecked()) {
+            m_uartLogEdit->moveCursor(QTextCursor::End);
+        }
+    }
+}
+
+void MainWindow::onClearUartLog()
+{
+    if (m_uartLogEdit) {
+        m_uartLogEdit->clear();
+    }
+}
