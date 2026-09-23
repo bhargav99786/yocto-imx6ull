@@ -39,10 +39,20 @@ fi
 cp -v /tmp/hmi-sleep-pkg/lib/systemd/system/hmi-sleep.service "$SD_TARGET/lib/systemd/system/hmi-sleep.service"
 cp -v /tmp/hmi-app-pkg/lib/systemd/system/hmi-app.service "$SD_TARGET/lib/systemd/system/hmi-app.service"
 
-echo "[5/6] Ensuring systemd services are enabled..."
+echo "[5/6] Enabling auto-flash-emmc trigger & configuring OTA server..."
+touch "$SD_TARGET/etc/auto-flash-emmc"
+echo "Created trigger flag: $SD_TARGET/etc/auto-flash-emmc"
+
+cat <<EOF > "$SD_TARGET/etc/ota-server.conf"
+OTA_SERVER_URL="http://192.168.0.110:8000"
+CHECK_INTERVAL=30
+EOF
+echo "Configured OTA server: http://192.168.0.110:8000 in $SD_TARGET/etc/ota-server.conf"
+
 mkdir -p "$SD_TARGET/etc/systemd/system/multi-user.target.wants"
 ln -sf /lib/systemd/system/hmi-app.service "$SD_TARGET/etc/systemd/system/multi-user.target.wants/hmi-app.service"
 ln -sf /lib/systemd/system/hmi-sleep.service "$SD_TARGET/etc/systemd/system/multi-user.target.wants/hmi-sleep.service"
+ln -sf /lib/systemd/system/emmc-autoinstall.service "$SD_TARGET/etc/systemd/system/multi-user.target.wants/emmc-autoinstall.service"
 
 echo "[6/6] Syncing disk caches to SD card..."
 sync
@@ -50,8 +60,9 @@ sync
 echo ""
 echo "==========================================================="
 echo " SUCCESS: SD Card rootfs_a has been updated with:"
-echo "   ✓ New hmi-app with UART Console, Sleep Timer & Paths Tab"
+echo "   ✓ New hmi-app (with UART, Sleep Timer, Paths, & SPI Test)"
 echo "   ✓ set-hmi-app CLI helper"
 echo "   ✓ hmi-sleep-daemon & sleep service"
-echo "   ✓ Validated touch calibration & 1:1 evdev config"
+echo "   ✓ Automatic eMMC Factory Flasher (/etc/auto-flash-emmc ENABLED)"
+echo "   ✓ OTA Server configured to http://192.168.0.110:8000"
 echo "==========================================================="

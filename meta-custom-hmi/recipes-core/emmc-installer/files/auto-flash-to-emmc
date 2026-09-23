@@ -12,51 +12,88 @@ echo "======================================================="
 echo " Starting MarknStamp eMMC Flashing Process (A/B Scheme)"
 echo "======================================================="
 
+# Helper function to detect if a block device is an eMMC chip
+# eMMC chips report "MMC" in /sys/block/<dev>/device/type and/or have boot0 hardware partitions.
+# SD cards report "SD" in /sys/block/<dev>/device/type and do NOT have boot0 hardware partitions.
+is_emmc_device() {
+    _disk="$1"
+    _name=$(basename "$_disk")
+    if [ -f "/sys/block/${_name}/device/type" ]; then
+        _type=$(cat "/sys/block/${_name}/device/type" 2>/dev/null || echo "")
+        if [ "$_type" = "MMC" ]; then
+            return 0
+        elif [ "$_type" = "SD" ]; then
+            return 1
+        fi
+    fi
+    if [ -e "/dev/${_name}boot0" ] || [ -d "/sys/block/${_name}boot0" ]; then
+        return 0
+    fi
+    return 1
+}
+
 # 1. Detect current root partition and root disk
 CURRENT_ROOT_PART=$(findmnt -n -o SOURCE / 2>/dev/null || mount | grep " / " | cut -d' ' -f1)
 CURRENT_ROOT_DISK=$(echo "$CURRENT_ROOT_PART" | sed -E 's/p[0-9]+$//')
 
-if echo "$CURRENT_ROOT_PART" | grep -q "mmcblk1p" || echo "$CURRENT_ROOT_PART" | grep -q "mmcblk2p"; then
-    echo "[emmc-installer] Notice: Booted from eMMC ($CURRENT_ROOT_PART). Auto-installer disabled."
+echo "Current root partition: $CURRENT_ROOT_PART (disk: $CURRENT_ROOT_DISK)"
+
+# Check if current system is already running on onboard eMMC
+if is_emmc_device "$CURRENT_ROOT_DISK"; then
+    echo "[emmc-installer] Notice: Booted from onboard eMMC ($CURRENT_ROOT_DISK). Auto-installer disabled."
     rm -f "$FLAG_FILE" 2>/dev/null || true
     exit 0
 fi
 
-# Find main eMMC disk (>1GB = >2000000 sectors) with maximum size
-MAX_SIZE=0
+# We are booted from SD card. Locate target onboard eMMC block device.
 EMMC_DEV=""
-
 for dev in /sys/block/mmcblk*; do
-    DEVNAME=$(basename $dev)
-    # Skip hardware boot/rpmb partitions and current root disk
-    if echo "$DEVNAME" | grep -q "boot" || echo "$DEVNAME" | grep -q "rpmb"; then
-        continue
-    fi
+    DEVNAME=$(basename "$dev")
+    case "$DEVNAME" in
+        *boot*|*rpmb*) continue ;;
+    esac
     if [ "/dev/$DEVNAME" = "$CURRENT_ROOT_DISK" ]; then
         continue
     fi
-    SIZE=$(cat $dev/size 2>/dev/null || echo 0)
-    if [ "$SIZE" -gt "$MAX_SIZE" ]; then
-        MAX_SIZE=$SIZE
+    if is_emmc_device "/dev/$DEVNAME"; then
         EMMC_DEV="/dev/$DEVNAME"
+        break
     fi
 done
 
+# Fallback: if is_emmc_device couldn't determine type, pick the largest non-root mmcblk device
 if [ -z "$EMMC_DEV" ]; then
-    if [ "$CURRENT_ROOT_DISK" = "/dev/mmcblk0" ]; then
-        EMMC_DEV="/dev/mmcblk1"
-    else
-        EMMC_DEV="/dev/mmcblk0"
-    fi
+    MAX_SIZE=0
+    for dev in /sys/block/mmcblk*; do
+        DEVNAME=$(basename "$dev")
+        case "$DEVNAME" in
+            *boot*|*rpmb*) continue ;;
+        esac
+        if [ "/dev/$DEVNAME" = "$CURRENT_ROOT_DISK" ]; then
+            continue
+        fi
+        SIZE=$(cat $dev/size 2>/dev/null || echo 0)
+        if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+            MAX_SIZE=$SIZE
+            EMMC_DEV="/dev/$DEVNAME"
+        fi
+    done
 fi
 
-echo "Source device: $CURRENT_ROOT_PART. Target eMMC device: $EMMC_DEV."
+if [ -z "$EMMC_DEV" ]; then
+    echo "[ERROR] No onboard eMMC device found! Current root: $CURRENT_ROOT_DISK. Aborting."
+    exit 1
+fi
+
+MAX_SIZE=$(cat "/sys/block/$(basename $EMMC_DEV)/size" 2>/dev/null || echo 0)
+
+echo "Source SD card: $CURRENT_ROOT_PART. Target eMMC device: $EMMC_DEV."
 echo "eMMC total sectors: $MAX_SIZE"
 
 # Safety check: eMMC must be > 1GB (>2000000 sectors of 512B)
 if [ "$MAX_SIZE" -lt 2000000 ]; then
     echo "[ERROR] Target device $EMMC_DEV is only ${MAX_SIZE} sectors — too small to be the eMMC!"
-    echo "[ERROR] Expected at least 8GB device. Aborting to prevent data corruption."
+    echo "[ERROR] Expected at least 4GB/8GB device. Aborting to prevent data corruption."
     exit 1
 fi
 
