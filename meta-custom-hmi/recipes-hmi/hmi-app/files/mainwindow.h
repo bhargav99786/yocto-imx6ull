@@ -49,6 +49,14 @@ private slots:
     void onClearUartLog();
     void onUartDataReady();
 
+    // SPI Test slots
+    void onSpiDeviceChanged(int index);
+    void onRunSpiLoopbackTest();
+    void onRunSpiPatternTest();
+    void onRunSpiProbeId();
+    void onTransferCustomSpi();
+    void onClearSpiLog();
+
     // Network & OTA slots
     void onRenewDhcp();
     void onRunPing();
@@ -84,9 +92,13 @@ private:
     QWidget *createHardwareControlTab();
     QWidget *createGpioTestTab();
     QWidget *createUartTab();
+    QWidget *createSpiTestTab();
     QWidget *createNetworkOtaTab();
     QWidget *createSystemTab();
     QWidget *createSystemInfoTab();
+
+    bool transferSpi(const QString &device, uint8_t mode, uint32_t speed,
+                     const QByteArray &txData, QByteArray &rxData, QString &errorMsg);
 
     QString getIpAddress();
     float getCpuTemperature();
@@ -145,6 +157,17 @@ private:
     QLineEdit *m_uartSendEdit;
     QComboBox *m_uartEndingCombo;
     QCheckBox *m_uartAutoScrollCheck;
+
+    // SPI Test widgets
+    QComboBox *m_spiDevCombo;
+    QComboBox *m_spiModeCombo;
+    QComboBox *m_spiSpeedCombo;
+    QLabel *m_spiPinRefLabel;
+    QLineEdit *m_spiCustomTxEdit;
+    QComboBox *m_spiFormatCombo;
+    QComboBox *m_spiPresetPatternCombo;
+    QTextEdit *m_spiLogEdit;
+    QLabel *m_spiResultBadge;
 
     // GPIO Test tab widgets
     QPushButton *m_led1ToggleBtn;

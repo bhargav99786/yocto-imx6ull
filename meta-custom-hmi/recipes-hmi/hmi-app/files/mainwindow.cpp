@@ -29,6 +29,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/ioctl.h>
+#include <linux/spi/spidev.h>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -54,6 +56,15 @@ MainWindow::MainWindow(QWidget *parent)
     , m_uartSendEdit(nullptr)
     , m_uartEndingCombo(nullptr)
     , m_uartAutoScrollCheck(nullptr)
+    , m_spiDevCombo(nullptr)
+    , m_spiModeCombo(nullptr)
+    , m_spiSpeedCombo(nullptr)
+    , m_spiPinRefLabel(nullptr)
+    , m_spiCustomTxEdit(nullptr)
+    , m_spiFormatCombo(nullptr)
+    , m_spiPresetPatternCombo(nullptr)
+    , m_spiLogEdit(nullptr)
+    , m_spiResultBadge(nullptr)
 {
     m_blinkTimer = new QTimer(this);
     connect(m_blinkTimer, &QTimer::timeout, this, &MainWindow::onBlinkTimeout);
@@ -140,7 +151,7 @@ void MainWindow::setupUi()
     m_tabWidget = new QTabWidget(this);
     m_tabWidget->setStyleSheet(
         "QTabWidget::pane { border: 1px solid #233242; background: #111822; border-radius: 8px; }"
-        "QTabBar::tab { background: #16202c; color: #8b949e; padding: 7px 10px; font-size: 12px; font-weight: bold; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }"
+        "QTabBar::tab { background: #16202c; color: #8b949e; padding: 6px 9px; font-size: 11px; font-weight: bold; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }"
         "QTabBar::tab:selected { background: #1f2d3d; color: #00d2ff; border-bottom: 3px solid #00d2ff; }"
         "QTabBar::tab:hover { background: #1b2636; color: #e6edf3; }"
     );
@@ -151,6 +162,7 @@ void MainWindow::setupUi()
     m_tabWidget->addTab(createHardwareControlTab(), "Display && Sleep");
     m_tabWidget->addTab(createGpioTestTab(), "GPIO Test");
     m_tabWidget->addTab(createUartTab(), "UART Console");
+    m_tabWidget->addTab(createSpiTestTab(), "SPI Test");
     m_tabWidget->addTab(createNetworkOtaTab(), "Network && OTA");
     m_tabWidget->addTab(createSystemInfoTab(), "Paths && Pinout");
     m_tabWidget->addTab(createSystemTab(), "Power");
@@ -846,6 +858,152 @@ QWidget *MainWindow::createUartTab()
     sendRow->addWidget(m_uartEndingCombo);
     sendRow->addWidget(sendBtn);
     vLayout->addLayout(sendRow);
+
+    return tab;
+}
+
+QWidget *MainWindow::createSpiTestTab()
+{
+    QWidget *tab = new QWidget(this);
+    QVBoxLayout *vLayout = new QVBoxLayout(tab);
+    vLayout->setContentsMargins(12, 10, 12, 10);
+    vLayout->setSpacing(8);
+
+    // ================= TOP CONFIGURATION PANEL =================
+    QFrame *topFrame = new QFrame(tab);
+    topFrame->setStyleSheet("background-color: #141c26; border: 1px solid #233242; border-radius: 8px; padding: 6px;");
+    QHBoxLayout *topLayout = new QHBoxLayout(topFrame);
+    topLayout->setContentsMargins(8, 4, 8, 4);
+    topLayout->setSpacing(10);
+
+    QLabel *devLbl = new QLabel("SPI Device:", topFrame);
+    devLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #00d2ff;");
+    m_spiDevCombo = new QComboBox(topFrame);
+    m_spiDevCombo->addItem("ECSPI1: /dev/spidev0.0 (P17 Pins 13-16)", "/dev/spidev0.0");
+    m_spiDevCombo->addItem("ECSPI2: /dev/spidev1.0 (P17 Pins 19-22)", "/dev/spidev1.0");
+    m_spiDevCombo->setFixedHeight(32);
+    m_spiDevCombo->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: bold;");
+    connect(m_spiDevCombo, static_cast<void(QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, &MainWindow::onSpiDeviceChanged);
+
+    QLabel *modeLbl = new QLabel("Mode:", topFrame);
+    modeLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #00d2ff;");
+    m_spiModeCombo = new QComboBox(topFrame);
+    m_spiModeCombo->addItem("Mode 0 (CPOL=0, CPHA=0)", 0);
+    m_spiModeCombo->addItem("Mode 1 (CPOL=0, CPHA=1)", 1);
+    m_spiModeCombo->addItem("Mode 2 (CPOL=1, CPHA=0)", 2);
+    m_spiModeCombo->addItem("Mode 3 (CPOL=1, CPHA=1)", 3);
+    m_spiModeCombo->setFixedHeight(32);
+    m_spiModeCombo->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 6px; font-size: 11px; font-weight: bold;");
+
+    QLabel *speedLbl = new QLabel("Speed:", topFrame);
+    speedLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #00d2ff;");
+    m_spiSpeedCombo = new QComboBox(topFrame);
+    m_spiSpeedCombo->addItem("100 kHz", 100000);
+    m_spiSpeedCombo->addItem("500 kHz", 500000);
+    m_spiSpeedCombo->addItem("1 MHz", 1000000);
+    m_spiSpeedCombo->addItem("5 MHz", 5000000);
+    m_spiSpeedCombo->addItem("10 MHz", 10000000);
+    m_spiSpeedCombo->addItem("20 MHz", 20000000);
+    m_spiSpeedCombo->setCurrentIndex(2); // 1 MHz default
+    m_spiSpeedCombo->setFixedHeight(32);
+    m_spiSpeedCombo->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 6px; font-size: 11px; font-weight: bold;");
+
+    topLayout->addWidget(devLbl);
+    topLayout->addWidget(m_spiDevCombo, 2);
+    topLayout->addWidget(modeLbl);
+    topLayout->addWidget(m_spiModeCombo);
+    topLayout->addWidget(speedLbl);
+    topLayout->addWidget(m_spiSpeedCombo);
+    vLayout->addWidget(topFrame);
+
+    // ================= HARDWARE PIN REFERENCE CALLOUT =================
+    m_spiPinRefLabel = new QLabel(tab);
+    m_spiPinRefLabel->setStyleSheet("background-color: #0d131a; color: #81c784; border: 1px solid #233242; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: bold;");
+    onSpiDeviceChanged(0);
+    vLayout->addWidget(m_spiPinRefLabel);
+
+    // ================= TEST PRESETS PANEL & RESULT BADGE =================
+    QFrame *testFrame = new QFrame(tab);
+    testFrame->setStyleSheet("background-color: #141c26; border: 1px solid #233242; border-radius: 8px; padding: 8px;");
+    QVBoxLayout *testLayout = new QVBoxLayout(testFrame);
+    testLayout->setContentsMargins(6, 4, 6, 4);
+    testLayout->setSpacing(8);
+
+    QHBoxLayout *actionRow = new QHBoxLayout();
+    actionRow->setSpacing(8);
+
+    QPushButton *loopbackBtn = new QPushButton("⚡ Run Loopback Test (MOSI -> MISO)", testFrame);
+    loopbackBtn->setFixedHeight(34);
+    loopbackBtn->setStyleSheet("background-color: #2e7d32; color: #ffffff; font-weight: bold; font-size: 11px; border-radius: 6px;");
+    connect(loopbackBtn, &QPushButton::clicked, this, &MainWindow::onRunSpiLoopbackTest);
+
+    QPushButton *probeBtn = new QPushButton("🔍 Probe Chip / JEDEC ID (0x9F)", testFrame);
+    probeBtn->setFixedHeight(34);
+    probeBtn->setStyleSheet("background-color: #0277bd; color: #ffffff; font-weight: bold; font-size: 11px; border-radius: 6px;");
+    connect(probeBtn, &QPushButton::clicked, this, &MainWindow::onRunSpiProbeId);
+
+    QPushButton *sweepBtn = new QPushButton("📶 Walking Bit Sweep", testFrame);
+    sweepBtn->setFixedHeight(34);
+    sweepBtn->setStyleSheet("background-color: #ef6c00; color: #ffffff; font-weight: bold; font-size: 11px; border-radius: 6px;");
+    connect(sweepBtn, &QPushButton::clicked, this, &MainWindow::onRunSpiPatternTest);
+
+    QPushButton *clearSpiBtn = new QPushButton("Clear Log", testFrame);
+    clearSpiBtn->setFixedHeight(34);
+    clearSpiBtn->setStyleSheet("background-color: #37474f; color: #cfd8dc; font-weight: bold; font-size: 11px; border-radius: 6px;");
+    connect(clearSpiBtn, &QPushButton::clicked, this, &MainWindow::onClearSpiLog);
+
+    actionRow->addWidget(loopbackBtn, 2);
+    actionRow->addWidget(probeBtn, 2);
+    actionRow->addWidget(sweepBtn, 2);
+    actionRow->addWidget(clearSpiBtn, 1);
+    testLayout->addLayout(actionRow);
+
+    m_spiResultBadge = new QLabel("Status: Ready to test SPI bus. Use loopback (MOSI-to-MISO) or attach an SPI device.", testFrame);
+    m_spiResultBadge->setFixedHeight(28);
+    m_spiResultBadge->setStyleSheet("background-color: #0b0f14; color: #b0bec5; border: 1px solid #1e2c3c; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+    testLayout->addWidget(m_spiResultBadge);
+
+    vLayout->addWidget(testFrame);
+
+    // ================= CUSTOM TRANSFER ROW =================
+    QHBoxLayout *customRow = new QHBoxLayout();
+    customRow->setSpacing(6);
+
+    QLabel *txLbl = new QLabel("Custom TX:", tab);
+    txLbl->setStyleSheet("font-size: 12px; font-weight: bold; color: #69f0ae;");
+
+    m_spiFormatCombo = new QComboBox(tab);
+    m_spiFormatCombo->addItem("Hex Bytes", "hex");
+    m_spiFormatCombo->addItem("ASCII Text", "ascii");
+    m_spiFormatCombo->setFixedHeight(32);
+    m_spiFormatCombo->setFixedWidth(100);
+    m_spiFormatCombo->setStyleSheet("background-color: #1a2432; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 6px; font-size: 11px; font-weight: bold;");
+
+    m_spiCustomTxEdit = new QLineEdit(tab);
+    m_spiCustomTxEdit->setFixedHeight(32);
+    m_spiCustomTxEdit->setText("55 AA 01 02 FF 00");
+    m_spiCustomTxEdit->setStyleSheet("background-color: #16202c; color: #ffffff; border: 1px solid #334d66; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-family: monospace;");
+    connect(m_spiCustomTxEdit, &QLineEdit::returnPressed, this, &MainWindow::onTransferCustomSpi);
+
+    QPushButton *customSendBtn = new QPushButton("Send / Exchange", tab);
+    customSendBtn->setFixedHeight(32);
+    customSendBtn->setFixedWidth(120);
+    customSendBtn->setStyleSheet("background-color: #00897b; color: #ffffff; font-weight: bold; font-size: 12px; border-radius: 6px;");
+    connect(customSendBtn, &QPushButton::clicked, this, &MainWindow::onTransferCustomSpi);
+
+    customRow->addWidget(txLbl);
+    customRow->addWidget(m_spiFormatCombo);
+    customRow->addWidget(m_spiCustomTxEdit, 1);
+    customRow->addWidget(customSendBtn);
+    vLayout->addLayout(customRow);
+
+    // ================= TERMINAL TEXT EDIT =================
+    m_spiLogEdit = new QTextEdit(tab);
+    m_spiLogEdit->setReadOnly(true);
+    m_spiLogEdit->setStyleSheet(
+        "QTextEdit { background-color: #0b0f14; color: #00d2ff; font-family: monospace; font-size: 11px; border: 1px solid #233242; border-radius: 6px; padding: 6px; }"
+    );
+    vLayout->addWidget(m_spiLogEdit, 1);
 
     return tab;
 }
@@ -2113,5 +2271,263 @@ void MainWindow::onClearUartLog()
 {
     if (m_uartLogEdit) {
         m_uartLogEdit->clear();
+    }
+}
+
+// ============================================================
+//                   SPI TEST HELPER & SLOTS
+// ============================================================
+
+bool MainWindow::transferSpi(const QString &device, uint8_t mode, uint32_t speed,
+                             const QByteArray &txData, QByteArray &rxData, QString &errorMsg)
+{
+    int fd = ::open(device.toLocal8Bit().constData(), O_RDWR);
+    if (fd < 0) {
+        errorMsg = QString("Failed to open %1: %2").arg(device, strerror(errno));
+        return false;
+    }
+
+    uint8_t bits = 8;
+    if (::ioctl(fd, SPI_IOC_WR_MODE, &mode) < 0 ||
+        ::ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bits) < 0 ||
+        ::ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0) {
+        errorMsg = QString("Failed to configure %1: %2").arg(device, strerror(errno));
+        ::close(fd);
+        return false;
+    }
+
+    rxData.resize(txData.size());
+    rxData.fill(0);
+
+    struct spi_ioc_transfer tr;
+    memset(&tr, 0, sizeof(tr));
+    tr.tx_buf = (unsigned long)txData.constData();
+    tr.rx_buf = (unsigned long)rxData.data();
+    tr.len = txData.size();
+    tr.speed_hz = speed;
+    tr.bits_per_word = bits;
+    tr.delay_usecs = 0;
+
+    if (::ioctl(fd, SPI_IOC_MESSAGE(1), &tr) < 0) {
+        errorMsg = QString("ioctl SPI_IOC_MESSAGE failed: %1").arg(strerror(errno));
+        ::close(fd);
+        return false;
+    }
+
+    ::close(fd);
+    return true;
+}
+
+void MainWindow::onSpiDeviceChanged(int index)
+{
+    if (!m_spiPinRefLabel || !m_spiDevCombo) return;
+    QString dev = m_spiDevCombo->itemData(index).toString();
+    if (dev == "/dev/spidev0.0") {
+        m_spiPinRefLabel->setText(
+            "📌 ECSPI1 on P17 Header: MOSI = Pin 14 | MISO = Pin 13 | SCLK = Pin 16 | CS = Pin 15 | GND = Pin 11/12/17/18 (3.3V Logic)\n"
+            "💡 Default Loopback Test: Connect jumper wire between P17 Pin 14 (MOSI) and Pin 13 (MISO), then click 'Run Loopback Test'."
+        );
+    } else {
+        m_spiPinRefLabel->setText(
+            "📌 ECSPI2 on P17 Header: MOSI = Pin 20 | MISO = Pin 19 | SCLK = Pin 22 | CS = Pin 21 | GND = Pin 17/18/23/24 (3.3V Logic)\n"
+            "💡 Default Loopback Test: Connect jumper wire between P17 Pin 20 (MOSI) and Pin 19 (MISO), then click 'Run Loopback Test'."
+        );
+    }
+}
+
+void MainWindow::onRunSpiLoopbackTest()
+{
+    if (!m_spiDevCombo || !m_spiModeCombo || !m_spiSpeedCombo || !m_spiLogEdit) return;
+
+    QString dev = m_spiDevCombo->currentData().toString();
+    uint8_t mode = m_spiModeCombo->currentData().toUInt();
+    uint32_t speed = m_spiSpeedCombo->currentData().toUInt();
+
+    static const unsigned char pattern[] = {
+        0x55, 0xAA, 0x00, 0xFF, 0x12, 0x34, 0x56, 0x78,
+        0xDE, 0xAD, 0xBE, 0xEF, 0x43, 0x21, 0xA5, 0x5A
+    };
+    QByteArray tx((const char*)pattern, sizeof(pattern));
+    QByteArray rx;
+    QString err;
+
+    bool ok = transferSpi(dev, mode, speed, tx, rx, err);
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    if (!ok) {
+        m_spiLogEdit->append(QString("<span style='color:#ef5350;'>[%1] [SPI ERROR] %2</span>").arg(timeStr, err));
+        if (m_spiResultBadge) {
+            m_spiResultBadge->setText("Status: " + err);
+            m_spiResultBadge->setStyleSheet("background-color: #b71c1c; color: #ffffff; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+        }
+        return;
+    }
+
+    bool matched = (tx == rx);
+    QString txHex = tx.toHex(' ').toUpper();
+    QString rxHex = rx.toHex(' ').toUpper();
+
+    m_spiLogEdit->append(QString("<span style='color:#8b949e;'>[%1] </span><span style='color:#00d2ff; font-weight:bold;'>[LOOPBACK TEST]</span> on %2 @ %3 Hz (Mode %4)")
+        .arg(timeStr, dev).arg(speed).arg(mode));
+    m_spiLogEdit->append(QString("  <span style='color:#69f0ae;'>TX: %1</span>").arg(txHex));
+    m_spiLogEdit->append(QString("  <span style='color:%1;'>RX: %2</span>").arg(matched ? "#69f0ae" : "#ffb74d", rxHex));
+
+    if (matched) {
+        m_spiLogEdit->append("<span style='color:#00e676; font-weight:bold;'>  ✓ VERIFIED: All 16 bytes matched exactly! Full-duplex bus loopback confirmed.</span>");
+        if (m_spiResultBadge) {
+            m_spiResultBadge->setText(QString("✓ PASS: Loopback Verified (16/16 Bytes Matched on %1 @ %2 kHz)").arg(dev).arg(speed / 1000));
+            m_spiResultBadge->setStyleSheet("background-color: #1b5e20; color: #69f0ae; border: 1px solid #2e7d32; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+        }
+    } else {
+        m_spiLogEdit->append("<span style='color:#ef5350; font-weight:bold;'>  ✗ MISMATCH: Received bytes do not match TX. Ensure MOSI and MISO jumper is in place!</span>");
+        if (m_spiResultBadge) {
+            m_spiResultBadge->setText("✗ LOOPBACK MISMATCH: Jumper MOSI to MISO to test loopback echo!");
+            m_spiResultBadge->setStyleSheet("background-color: #bf360c; color: #ffccbc; border: 1px solid #d84315; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+        }
+    }
+}
+
+void MainWindow::onRunSpiProbeId()
+{
+    if (!m_spiDevCombo || !m_spiModeCombo || !m_spiSpeedCombo || !m_spiLogEdit) return;
+
+    QString dev = m_spiDevCombo->currentData().toString();
+    uint8_t mode = m_spiModeCombo->currentData().toUInt();
+    uint32_t speed = m_spiSpeedCombo->currentData().toUInt();
+
+    // Standard JEDEC ID command: 0x9F followed by 3 dummy bytes
+    QByteArray tx;
+    tx.append((char)0x9F);
+    tx.append((char)0x00);
+    tx.append((char)0x00);
+    tx.append((char)0x00);
+
+    QByteArray rx;
+    QString err;
+    bool ok = transferSpi(dev, mode, speed, tx, rx, err);
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    if (!ok) {
+        m_spiLogEdit->append(QString("<span style='color:#ef5350;'>[%1] [SPI ERROR] %2</span>").arg(timeStr, err));
+        return;
+    }
+
+    QString rxHex = rx.toHex(' ').toUpper();
+    m_spiLogEdit->append(QString("<span style='color:#8b949e;'>[%1] </span><span style='color:#0288d1; font-weight:bold;'>[CHIP PROBE 0x9F]</span> on %2: RX = %3")
+        .arg(timeStr, dev, rxHex));
+
+    uint8_t mfg = (uint8_t)rx.at(1);
+    uint8_t devType = (uint8_t)rx.at(2);
+    uint8_t cap = (uint8_t)rx.at(3);
+
+    if (mfg != 0x00 && mfg != 0xFF) {
+        m_spiLogEdit->append(QString("<span style='color:#00e676;'>  ✓ Detected Device Response: Mfg ID=0x%1, Type=0x%2, Capacity=0x%3</span>")
+            .arg(mfg, 2, 16, QChar('0')).arg(devType, 2, 16, QChar('0')).arg(cap, 2, 16, QChar('0')));
+        if (m_spiResultBadge) {
+            m_spiResultBadge->setText(QString("✓ Device Detected: Mfg=0x%1 Type=0x%2 Cap=0x%3")
+                .arg(mfg, 2, 16, QChar('0')).arg(devType, 2, 16, QChar('0')).arg(cap, 2, 16, QChar('0')));
+            m_spiResultBadge->setStyleSheet("background-color: #0d47a1; color: #80d8ff; border: 1px solid #1976d2; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+        }
+    } else {
+        m_spiLogEdit->append("<span style='color:#b0bec5;'>  No external SPI chip recognized (all 0x00 or 0xFF). Bus is open or unpopulated.</span>");
+        if (m_spiResultBadge) {
+            m_spiResultBadge->setText(QString("Probe Result: %1 (No peripheral slave detected)").arg(rxHex));
+            m_spiResultBadge->setStyleSheet("background-color: #263238; color: #b0bec5; border: 1px solid #37474f; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+        }
+    }
+}
+
+void MainWindow::onRunSpiPatternTest()
+{
+    if (!m_spiDevCombo || !m_spiModeCombo || !m_spiSpeedCombo || !m_spiLogEdit) return;
+
+    QString dev = m_spiDevCombo->currentData().toString();
+    uint8_t mode = m_spiModeCombo->currentData().toUInt();
+    uint32_t speed = m_spiSpeedCombo->currentData().toUInt();
+
+    static const unsigned char bits[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
+    QByteArray tx((const char*)bits, sizeof(bits));
+    QByteArray rx;
+    QString err;
+
+    bool ok = transferSpi(dev, mode, speed, tx, rx, err);
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    if (!ok) {
+        m_spiLogEdit->append(QString("<span style='color:#ef5350;'>[%1] [SPI ERROR] %2</span>").arg(timeStr, err));
+        return;
+    }
+
+    bool matched = (tx == rx);
+    m_spiLogEdit->append(QString("<span style='color:#8b949e;'>[%1] </span><span style='color:#ff9800; font-weight:bold;'>[WALKING BITS]</span> TX: %2 | RX: %3 (%4)")
+        .arg(timeStr, tx.toHex(' ').toUpper(), rx.toHex(' ').toUpper(), matched ? "MATCHED" : "MISMATCH"));
+
+    if (m_spiResultBadge) {
+        if (matched) {
+            m_spiResultBadge->setText("✓ Walking Bits PASS: All 8 bit positions verified!");
+            m_spiResultBadge->setStyleSheet("background-color: #1b5e20; color: #69f0ae; border: 1px solid #2e7d32; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+        } else {
+            m_spiResultBadge->setText(QString("Walking Bits: TX [%1] != RX [%2]").arg(tx.toHex(' ').toUpper(), rx.toHex(' ').toUpper()));
+            m_spiResultBadge->setStyleSheet("background-color: #37474f; color: #eceff1; border: 1px solid #455a64; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: bold;");
+        }
+    }
+}
+
+void MainWindow::onTransferCustomSpi()
+{
+    if (!m_spiDevCombo || !m_spiModeCombo || !m_spiSpeedCombo || !m_spiCustomTxEdit || !m_spiLogEdit) return;
+
+    QString dev = m_spiDevCombo->currentData().toString();
+    uint8_t mode = m_spiModeCombo->currentData().toUInt();
+    uint32_t speed = m_spiSpeedCombo->currentData().toUInt();
+    QString input = m_spiCustomTxEdit->text().trimmed();
+    if (input.isEmpty()) return;
+
+    QByteArray tx;
+    if (m_spiFormatCombo && m_spiFormatCombo->currentData().toString() == "ascii") {
+        tx = input.toUtf8();
+    } else {
+        // Hex bytes: remove spaces, colons, 0x prefixes
+        QString clean = input;
+        clean.remove("0x", Qt::CaseInsensitive);
+        clean.remove(' ');
+        clean.remove(':');
+        clean.remove(',');
+        tx = QByteArray::fromHex(clean.toLatin1());
+    }
+
+    if (tx.isEmpty()) {
+        m_spiLogEdit->append("<span style='color:#ef5350;'>[ERROR] Invalid custom TX data (empty or invalid hex).</span>");
+        return;
+    }
+
+    QByteArray rx;
+    QString err;
+    bool ok = transferSpi(dev, mode, speed, tx, rx, err);
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    if (!ok) {
+        m_spiLogEdit->append(QString("<span style='color:#ef5350;'>[%1] [SPI ERROR] %2</span>").arg(timeStr, err));
+        return;
+    }
+
+    QString txHex = tx.toHex(' ').toUpper();
+    QString rxHex = rx.toHex(' ').toUpper();
+    QString rxAscii;
+    for (char c : rx) {
+        rxAscii.append((c >= 32 && c <= 126) ? QChar(c) : QChar('.'));
+    }
+
+    m_spiLogEdit->append(QString("<span style='color:#8b949e;'>[%1] </span><span style='color:#69f0ae; font-weight:bold;'>[CUSTOM SPI]</span> %2 bytes on %3")
+        .arg(timeStr).arg(tx.size()).arg(dev));
+    m_spiLogEdit->append(QString("  <span style='color:#b0bec5;'>TX Hex:</span> %1").arg(txHex));
+    m_spiLogEdit->append(QString("  <span style='color:#00d2ff;'>RX Hex:</span> %1 <span style='color:#78909c;'>(ASCII: \"%2\")</span>")
+        .arg(rxHex, rxAscii));
+}
+
+void MainWindow::onClearSpiLog()
+{
+    if (m_spiLogEdit) {
+        m_spiLogEdit->clear();
     }
 }
