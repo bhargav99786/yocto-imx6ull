@@ -16,3 +16,9 @@ IMAGE_INSTALL:append = " \
     touch-test \
     hmi-sleep \
 "
+
+# Qt5 SDK Configuration (Provides cross-compilation native qmake, qt.conf, and headers)
+inherit populate_sdk_qt5_base
+
+TOOLCHAIN_HOST_TASK:append = " nativesdk-packagegroup-qt5-toolchain-host"
+TOOLCHAIN_TARGET_TASK:append = " qtbase-dev qtbase-mkspecs qtdeclarative-dev qtdeclarative-mkspecs"

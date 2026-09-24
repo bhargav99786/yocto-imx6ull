@@ -580,6 +580,8 @@ QWidget *MainWindow::createGpioTestTab()
     addPresetBtn(1, 1, "Backlight PWM (Chip 0, Line 8)", 0, 8);
     addPresetBtn(2, 0, "UART3 TX (Chip 0, Line 24)", 0, 24);
     addPresetBtn(2, 1, "UART3 RX (Chip 0, Line 25)", 0, 25);
+    addPresetBtn(3, 0, "P17-8 GPIO (Chip 3, Line 20)", 3, 20);
+    addPresetBtn(3, 1, "P17-9 GPIO (Chip 3, Line 17)", 3, 17);
     presetLayout->addLayout(btnGrid);
 
     leftCol->addWidget(presetBox);
@@ -1126,6 +1128,14 @@ QWidget *MainWindow::createSystemInfoTab()
     pinSub->setStyleSheet("font-size: 11px; color: #8b949e;");
     pinoutLayout->addWidget(pinSub);
 
+    QLabel *gpioNote = new QLabel(
+        "<b>GPIO Configuration Note for P17 Pin 8 &amp; Pin 9:</b><br>"
+        "• <b>Pin 8 (CSI_HSYNC):</b> <code>gpiochip3</code> Line 20 (Linux GPIO 116 / <code>GPIO4_IO20</code>). Default: I2C2_SCL. Safe to use as User GPIO if I2C2 audio codec is not used.<br>"
+        "• <b>Pin 9 (CSI_MCLK):</b> <code>gpiochip3</code> Line 17 (Linux GPIO 113 / <code>GPIO4_IO17</code>). Default: I2C1_SDA. <i>Caution:</i> Shared with Goodix CTP Touchscreen &amp; RTC."
+    );
+    gpioNote->setStyleSheet("background-color: #16222f; border-left: 3px solid #00d2ff; padding: 6px 10px; font-size: 11px; color: #b0bec5; border-radius: 4px; margin-bottom: 4px;");
+    pinoutLayout->addWidget(gpioNote);
+
     QTableWidget *table = new QTableWidget(pinoutBox);
     table->setColumnCount(5);
     table->setHorizontalHeaderLabels(QStringList() << "P17 Pin" << "Board Label" << "SoC Pad" << "Function / Linux Device" << "Sysfs GPIO");
@@ -1159,8 +1169,8 @@ QWidget *MainWindow::createSystemInfoTab()
         { 5,  "GND",         "—",            "Ground",                           "—",                    "#78909c" },
         { 6,  "GND",         "—",            "Ground",                           "—",                    "#78909c" },
         { 7,  "I2C1_SCL",    "CSI_PIXCLK",   "I2C1 Clock (/dev/i2c-0)",          "GPIO 114 (GPIO4_IO18)","#ce93d8" },
-        { 8,  "I2C2_SCL",    "CSI_HSYNC",    "I2C2 Clock (/dev/i2c-1)",          "GPIO 116 (GPIO4_IO20)","#ce93d8" },
-        { 9,  "I2C1_SDA",    "CSI_MCLK",     "I2C1 Data (/dev/i2c-0)",           "GPIO 113 (GPIO4_IO17)","#ce93d8" },
+        { 8,  "I2C2_SCL / GPIO", "CSI_HSYNC", "I2C2 Clock (/dev/i2c-1) / User GPIO", "GPIO 116 (GPIO4_IO20 / Chip 3 Line 20)","#00e676" },
+        { 9,  "I2C1_SDA / GPIO", "CSI_MCLK",  "I2C1 Data (/dev/i2c-0) / User GPIO",  "GPIO 113 (GPIO4_IO17 / Chip 3 Line 17)","#00e676" },
         { 10, "I2C2_SDA",    "CSI_VSYNC",    "I2C2 Data (/dev/i2c-1)",           "GPIO 115 (GPIO4_IO19)","#ce93d8" },
         { 11, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
         { 12, "GND",         "—",            "Ground",                           "—",                    "#78909c" },
