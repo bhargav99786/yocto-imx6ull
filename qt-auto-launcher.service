@@ -1,0 +1,17 @@
+[Unit]
+Description=Custom Qt Application Launcher with USB Auto-Update
+DefaultDependencies=no
+Wants=systemd-udev-settle.service
+After=systemd-udev-trigger.service systemd-udev-settle.service systemd-modules-load.service
+Before=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qt-auto-launcher.sh
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

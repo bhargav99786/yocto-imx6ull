@@ -2,7 +2,6 @@ IMAGE_FSTYPES += "ext4.gz"
 
 IMAGE_INSTALL:append = " \
     boot-splash \
-    hmi-app \
     ttf-dejavu-sans \
     ttf-dejavu-common \
     fontconfig \
@@ -15,6 +14,7 @@ IMAGE_INSTALL:append = " \
     confirm-boot \
     touch-test \
     hmi-sleep \
+    qt-auto-launcher \
 "
 
 # Qt5 SDK Configuration (Provides cross-compilation native qmake, qt.conf, and target headers)
