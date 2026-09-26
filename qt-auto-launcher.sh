@@ -10,8 +10,18 @@ APP_EXEC="$APP_DIR/app"
 mkdir -p "$APP_DIR"
 
 # 1. Search for mounted USB drive path
+# Attempt mounting /dev/sda1 or /dev/sda if block device exists and not yet mounted
+if [ -b /dev/sda1 ]; then
+    mkdir -p /media/sda1
+    mount /dev/sda1 /media/sda1 2>/dev/null || true
+fi
+if [ -b /dev/sda ]; then
+    mkdir -p /media/sda
+    mount /dev/sda /media/sda 2>/dev/null || true
+fi
+
 USB_PATH=""
-for path in /media/sda1 /run/media/sda1 /media/usb /run/media/*/* /run/media/*; do
+for path in /media/sda1 /media/sda /run/media/sda1 /run/media/sda /media/usb /run/media/*/* /run/media/*; do
     if [ -d "$path" ]; then
         USB_PATH="$path"
         break
