@@ -8,13 +8,13 @@ This guide is the single authoritative reference for hardware interfaces (GPIO, 
 
 | Feature | Live on Device (Runtime) | Yocto Recipe Source (Permanent) | Service to Restart |
 | :--- | :--- | :--- | :--- |
-| **Ethernet eth0 (Port 1)** | `/etc/systemd/network/10-eth0.network` | [`meta-custom-hmi/recipes-core/systemd/files/10-eth0.network`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-core/systemd/files/10-eth0.network) | `systemctl restart systemd-networkd` |
-| **Ethernet eth1 (Port 2)** | `/etc/systemd/network/11-eth1.network` | [`meta-custom-hmi/recipes-core/systemd/files/11-eth1.network`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-core/systemd/files/11-eth1.network) | `systemctl restart systemd-networkd` |
-| **OTA Server & Polling** | `/etc/ota-server.conf` | [`meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf) | `systemctl restart ota-agent` |
-| **Display Sleep Timeout** | `/etc/hmi-sleep.conf` | [`meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf) | `systemctl restart hmi-sleep` |
-| **USB Auto-Update Script** | `/usr/bin/qt-auto-launcher.sh` | [`meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/qt-auto-launcher.sh`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/qt-auto-launcher.sh) | `systemctl restart qt-auto-launcher` |
-| **Default Bundled Binary** | `/opt/hmi/bin/app` | [`meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/test`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/test) | `systemctl restart qt-auto-launcher` |
-| **Device Tree (Pads/Buses)**| `/boot/okmx6ull-c-emmc.dtb` | [`meta-custom-hmi/recipes-kernel/linux/files/imx6ull-custom-hmi.dts`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-kernel/linux/files/imx6ull-custom-hmi.dts) | Re-compile kernel / reboot |
+| **Ethernet eth0 (Port 1)** | `/etc/systemd/network/10-eth0.network` | [`meta-custom-hmi/recipes-core/systemd/files/10-eth0.network`](meta-custom-hmi/recipes-core/systemd/files/10-eth0.network) | `systemctl restart systemd-networkd` |
+| **Ethernet eth1 (Port 2)** | `/etc/systemd/network/11-eth1.network` | [`meta-custom-hmi/recipes-core/systemd/files/11-eth1.network`](meta-custom-hmi/recipes-core/systemd/files/11-eth1.network) | `systemctl restart systemd-networkd` |
+| **OTA Server & Polling** | `/etc/ota-server.conf` | [`meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf`](meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf) | `systemctl restart ota-agent` |
+| **Display Sleep Timeout** | `/etc/hmi-sleep.conf` | [`meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf`](meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf) | `systemctl restart hmi-sleep` |
+| **USB Auto-Update Script** | `/usr/bin/qt-auto-launcher.sh` | [`meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/qt-auto-launcher.sh`](meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/qt-auto-launcher.sh) | `systemctl restart qt-auto-launcher` |
+| **Default Bundled Binary** | `/opt/hmi/bin/app` | [`meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/test`](meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/test) | `systemctl restart qt-auto-launcher` |
+| **Device Tree (Pads/Buses)**| `/boot/okmx6ull-c-emmc.dtb` | [`meta-custom-hmi/recipes-kernel/linux/files/imx6ull-custom-hmi.dts`](meta-custom-hmi/recipes-kernel/linux/files/imx6ull-custom-hmi.dts) | Re-compile kernel / reboot |
 
 ---
 
@@ -148,7 +148,7 @@ The system uses `systemd-networkd` with dedicated configuration files for each E
 ### Configuration Files:
 * **Port 1 (eth0 / fec1):** `/etc/systemd/network/10-eth0.network`
 * **Port 2 (eth1 / fec2):** `/etc/systemd/network/11-eth1.network`
-* **Yocto Recipe:** [`meta-custom-hmi/recipes-core/systemd/files/`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-core/systemd/files/)
+* **Yocto Recipe:** [`meta-custom-hmi/recipes-core/systemd/files/`](meta-custom-hmi/recipes-core/systemd/files/)
 
 ---
 
@@ -213,7 +213,7 @@ The `ota-agent` service polls an HTTP OTA server in the background, checks for n
 * **Runtime Config File:** `/etc/ota-server.conf`
 * **Systemd Service:** `ota-agent.service` (`/lib/systemd/system/ota-agent.service`)
 * **Agent Executable:** `/usr/bin/ota-update-agent`
-* **Yocto Source:** [`meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf)
+* **Yocto Source:** [`meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf`](meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf)
 
 ### How to Change the OTA Server URL & Interval
 
@@ -245,7 +245,7 @@ The `hmi-sleep` service monitors touch screen activity. If no touch input occurs
 * **Runtime Config File:** `/etc/hmi-sleep.conf`
 * **Systemd Service:** `hmi-sleep.service` (`/lib/systemd/system/hmi-sleep.service`)
 * **Daemon Binary:** `/usr/bin/hmi-sleep-daemon`
-* **Yocto Source:** [`meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf)
+* **Yocto Source:** [`meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf`](meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf)
 
 ### How to Adjust Display Sleep Timeout
 
@@ -280,7 +280,7 @@ The system features an automated USB auto-update mechanism that replaces the run
 * **Target Application Binary:** `/opt/hmi/bin/app`
 * **Launcher Script:** `/usr/bin/qt-auto-launcher.sh`
 * **Systemd Service:** `qt-auto-launcher.service`
-* **Yocto Source Recipe:** [`meta-custom-hmi/recipes-hmi/qt-auto-launcher/`](file:///home/bhargav/yocto-imx6ull/meta-custom-hmi/recipes-hmi/qt-auto-launcher/)
+* **Yocto Source Recipe:** [`meta-custom-hmi/recipes-hmi/qt-auto-launcher/`](meta-custom-hmi/recipes-hmi/qt-auto-launcher/)
 
 ---
 
@@ -297,7 +297,7 @@ Place these **2 files** directly in the root of the USB flash drive:
 #### 2. Automatic Boot Update
 1. Insert the USB flash drive into the board's USB host port.
 2. Power cycle or reboot the board.
-3. [`qt-auto-launcher.sh`](file:///home/bhargav/yocto-imx6ull/qt-auto-launcher.sh) automatically:
+3. [`qt-auto-launcher.sh`](qt-auto-launcher.sh) automatically:
    * Auto-mounts `/dev/sda1` or `/dev/sda` to `/media/sda1` or `/media/sda`.
    * Searches mount points `/media/sda1`, `/media/sda`, `/run/media/*`.
    * Validates `UpdateCont` equals `Y`.

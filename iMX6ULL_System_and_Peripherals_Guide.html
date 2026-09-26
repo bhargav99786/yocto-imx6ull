@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>i.MX6ULL System Peripherals, Interfaces & Services Configuration Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    line-height: 1.35;
+    font-size: 8.5pt;
+  }
+
+  .doc-page {
+    page-break-after: always;
+    min-height: 275mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .doc-page:last-child {
+    page-break-after: avoid;
+  }
+
+  /* Header Bar */
+  .doc-header {
+    border-bottom: 2px solid #0284c7;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .doc-title-group h1 {
+    font-size: 15pt;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    margin-bottom: 2px;
+  }
+
+  .doc-title-group p {
+    font-size: 8.5pt;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .doc-meta {
+    text-align: right;
+    font-size: 7.5pt;
+    color: #64748b;
+    line-height: 1.35;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 7pt;
+    text-transform: uppercase;
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+
+  h2 {
+    font-size: 10.5pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 10px;
+    margin-bottom: 5px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+  }
+
+  h2 .sec-num {
+    background: #0284c7;
+    color: #ffffff;
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 6px;
+  }
+
+  h3 {
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: #334155;
+    margin-top: 6px;
+    margin-bottom: 3px;
+  }
+
+  p {
+    margin-bottom: 5px;
+    color: #334155;
+  }
+
+  ul {
+    margin-left: 16px;
+    margin-bottom: 6px;
+  }
+
+  li {
+    margin-bottom: 2px;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 5px 0 8px 0;
+    font-size: 7.5pt;
+  }
+
+  th {
+    background: #f1f5f9;
+    color: #1e293b;
+    font-weight: 600;
+    text-align: left;
+    padding: 4px 6px;
+    border: 1px solid #cbd5e1;
+  }
+
+  td {
+    padding: 4px 6px;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  /* Code Blocks */
+  code {
+    font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+    font-size: 7pt;
+    background: #f1f5f9;
+    color: #0f172a;
+    padding: 1px 3px;
+    border-radius: 2px;
+    border: 1px solid #e2e8f0;
+  }
+
+  pre {
+    background: #0f172a;
+    color: #f8fafc;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 7pt;
+    line-height: 1.35;
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin: 4px 0 6px 0;
+  }
+
+  pre .comment { color: #94a3b8; }
+  pre .cmd { color: #38bdf8; font-weight: 600; }
+  pre .param { color: #a5f3fc; }
+  pre .str { color: #fde047; }
+  pre .flag { color: #4ade80; }
+
+  /* Info Callouts */
+  .callout {
+    padding: 6px 8px;
+    border-left: 3px solid #0284c7;
+    background: #f0f9ff;
+    border-radius: 0 4px 4px 0;
+    margin: 5px 0;
+    font-size: 7.5pt;
+    color: #0369a1;
+  }
+
+  .callout-success {
+    border-left-color: #10b981;
+    background: #f0fdf4;
+    color: #047857;
+  }
+
+  .footer-note {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 5px;
+    margin-top: auto;
+    font-size: 7pt;
+    color: #94a3b8;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+  <!-- PAGE 1: Header, Quick Reference Matrix, GPIO -->
+  <div class="doc-page">
+    <div class="doc-header">
+      <div class="doc-title-group">
+        <h1>i.MX6ULL Embedded System Configuration Guide</h1>
+        <p>Hardware Peripherals, Systemd Network & Services Reference &bull; Client Engineering Manual</p>
+      </div>
+      <div class="doc-meta">
+        <div><span class="badge">Technical Guide</span></div>
+        <div><strong>Platform:</strong> NXP i.MX6ULL (ARM Cortex-A7)</div>
+        <div><strong>Revision:</strong> 1.0 &bull; Release Version</div>
+      </div>
+    </div>
+
+    <h2><span class="sec-num">01</span> Quick Reference: "Which File Do I Edit?"</h2>
+    <p>This table maps every system feature to its runtime file on the target board, its persistent source location in the Yocto layer repository, and the systemd restart command:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 22%;">Feature / Component</th>
+          <th style="width: 28%;">On Board (Runtime Path)</th>
+          <th style="width: 32%;">Repository Source (Yocto Recipe)</th>
+          <th style="width: 18%;">Service Restart</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Ethernet eth0 (Port 1)</strong></td>
+          <td><code>/etc/systemd/network/10-eth0.network</code></td>
+          <td><code>meta-custom-hmi/recipes-core/systemd/files/10-eth0.network</code></td>
+          <td><code>systemctl restart systemd-networkd</code></td>
+        </tr>
+        <tr>
+          <td><strong>Ethernet eth1 (Port 2)</strong></td>
+          <td><code>/etc/systemd/network/11-eth1.network</code></td>
+          <td><code>meta-custom-hmi/recipes-core/systemd/files/11-eth1.network</code></td>
+          <td><code>systemctl restart systemd-networkd</code></td>
+        </tr>
+        <tr>
+          <td><strong>OTA Server URL & Interval</strong></td>
+          <td><code>/etc/ota-server.conf</code></td>
+          <td><code>meta-custom-hmi/recipes-core/ota-agent/files/ota-server.conf</code></td>
+          <td><code>systemctl restart ota-agent</code></td>
+        </tr>
+        <tr>
+          <td><strong>Display Sleep Timeout</strong></td>
+          <td><code>/etc/hmi-sleep.conf</code></td>
+          <td><code>meta-custom-hmi/recipes-hmi/hmi-sleep/files/hmi-sleep.conf</code></td>
+          <td><code>systemctl restart hmi-sleep</code></td>
+        </tr>
+        <tr>
+          <td><strong>USB Auto-Update Script</strong></td>
+          <td><code>/usr/bin/qt-auto-launcher.sh</code></td>
+          <td><code>meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/qt-auto-launcher.sh</code></td>
+          <td><code>systemctl restart qt-auto-launcher</code></td>
+        </tr>
+        <tr>
+          <td><strong>Default Bundled Executable</strong></td>
+          <td><code>/opt/hmi/bin/app</code></td>
+          <td><code>meta-custom-hmi/recipes-hmi/qt-auto-launcher/files/test</code></td>
+          <td><code>systemctl restart qt-auto-launcher</code></td>
+        </tr>
+        <tr>
+          <td><strong>Device Tree (Pads & Buses)</strong></td>
+          <td><code>/boot/okmx6ull-c-emmc.dtb</code></td>
+          <td><code>meta-custom-hmi/recipes-kernel/linux/files/imx6ull-custom-hmi.dts</code></td>
+          <td>Rebuild kernel / reboot</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec-num">02</span> GPIO Control & P17 Expansion Header</h2>
+    <p>Linux calculates sysfs GPIO numbers on i.MX6ULL via: <code>GPIO Number = (Bank - 1) &times; 32 + Pin</code>.</p>
+    <ul>
+      <li><code>GPIO1</code> = <code>gpiochip0</code> (Pins 0–31) &bull; <code>GPIO2</code> = <code>gpiochip1</code> (Pins 32–63) &bull; <code>GPIO3</code> = <code>gpiochip2</code> (Pins 64–95)</li>
+      <li><code>GPIO4</code> = <code>gpiochip3</code> (Pins 96–127) &bull; <code>GPIO5</code> = <code>gpiochip4</code> (Pins 128–159)</li>
+    </ul>
+
+    <table>
+      <thead>
+        <tr>
+          <th>P17 Pin</th>
+          <th>SoC Pad</th>
+          <th>Linux Sysfs GPIO</th>
+          <th>gpiod Line</th>
+          <th>Default Mode</th>
+          <th>Notes & Safety</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Pin 8</strong></td>
+          <td><code>CSI_HSYNC</code></td>
+          <td><strong>GPIO 116</strong> (<code>GPIO4_IO20</code>)</td>
+          <td><code>gpiochip3</code> Line 20</td>
+          <td>User GPIO / I2C2 SCL</td>
+          <td>Primary user GPIO pin. Fully safe for arbitrary digital I/O.</td>
+        </tr>
+        <tr>
+          <td><strong>Pin 9</strong></td>
+          <td><code>CSI_MCLK</code></td>
+          <td><strong>GPIO 113</strong> (<code>GPIO4_IO17</code>)</td>
+          <td><code>gpiochip3</code> Line 17</td>
+          <td>User GPIO / I2C1 SDA</td>
+          <td><em>Shared with Touchscreen and RTC on I2C1 bus.</em></td>
+        </tr>
+        <tr>
+          <td><strong>Backlight</strong></td>
+          <td><code>GPIO1_IO08</code></td>
+          <td><strong>GPIO 8</strong> (<code>GPIO1_IO08</code>)</td>
+          <td><code>gpiochip0</code> Line 8</td>
+          <td>PWM / Backlight</td>
+          <td>LCD backlight brightness & display sleep control.</td>
+        </tr>
+        <tr>
+          <td><strong>UART3 TX</strong></td>
+          <td><code>UART3_TX</code></td>
+          <td><strong>GPIO 24</strong> (<code>GPIO1_IO24</code>)</td>
+          <td><code>gpiochip0</code> Line 24</td>
+          <td>UART3 Transmit</td>
+          <td>Repurposable if UART3 peripheral is unused.</td>
+        </tr>
+        <tr>
+          <td><strong>UART3 RX</strong></td>
+          <td><code>UART3_RX</code></td>
+          <td><strong>GPIO 25</strong> (<code>GPIO1_IO25</code>)</td>
+          <td><code>gpiochip0</code> Line 25</td>
+          <td>UART3 Receive</td>
+          <td>Repurposable if UART3 peripheral is unused.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Controlling GPIO Lines (Command Line)</h3>
+    <pre><span class="comment"># Method 1: Using modern libgpiod tools (Recommended)</span>
+<span class="cmd">gpioset</span> <span class="param">gpiochip3 20=1</span>     <span class="comment"># Drive Pin 8 (chip 3 line 20) HIGH</span>
+<span class="cmd">gpioset</span> <span class="param">gpiochip3 20=0</span>     <span class="comment"># Drive Pin 8 LOW</span>
+<span class="cmd">gpioget</span> <span class="param">gpiochip3 20</span>       <span class="comment"># Read current logic state (returns 0 or 1)</span>
+
+<span class="comment"># Method 2: Using legacy sysfs interface (/sys/class/gpio)</span>
+<span class="cmd">echo</span> <span class="str">116</span> > /sys/class/gpio/export
+<span class="cmd">echo</span> <span class="str">out</span> > /sys/class/gpio/gpio116/direction
+<span class="cmd">echo</span> <span class="str">1</span>   > /sys/class/gpio/gpio116/value
+<span class="cmd">cat</span> /sys/class/gpio/gpio116/value
+<span class="cmd">echo</span> <span class="str">116</span> > /sys/class/gpio/unexport</pre>
+
+    <div class="footer-note">
+      <span>i.MX6ULL Embedded System Configuration Guide &bull; Client Reference</span>
+      <span>Page 1 of 3</span>
+    </div>
+  </div>
+
+  <!-- PAGE 2: UART, SPI, Dual Ethernet -->
+  <div class="doc-page">
+    <div class="doc-header">
+      <div class="doc-title-group">
+        <h1>Hardware Interfaces: UART, SPI & Ethernet</h1>
+        <p>Bus Mapping, Testing Utilities & Dual Network Configuration</p>
+      </div>
+      <div class="doc-meta">
+        <div><strong>Platform:</strong> NXP i.MX6ULL</div>
+        <div>Page 2 of 3</div>
+      </div>
+    </div>
+
+    <h2><span class="sec-num">03</span> UART Serial Interfaces</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Device Node</th>
+          <th>Hardware Port</th>
+          <th>Default Baud</th>
+          <th>Role & Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/dev/ttymxc0</code></td>
+          <td>UART1</td>
+          <td><code>115200 8N1</code></td>
+          <td><strong>Debug Serial Console</strong> (Connected to onboard USB-to-UART bridge / host PC)</td>
+        </tr>
+        <tr>
+          <td><code>/dev/ttymxc1</code></td>
+          <td>UART2</td>
+          <td>Application default</td>
+          <td>General Purpose RS232 / TTL peripheral interface</td>
+        </tr>
+        <tr>
+          <td><code>/dev/ttymxc2</code></td>
+          <td>UART3</td>
+          <td>Application default</td>
+          <td>General Purpose TTL interface (P17 expansion pins)</td>
+        </tr>
+        <tr>
+          <td><code>/dev/ttymxc3</code></td>
+          <td>UART4</td>
+          <td>Application default</td>
+          <td>General Purpose RS485 / TTL peripheral interface</td>
+        </tr>
+        <tr>
+          <td><code>/dev/ttymxc4</code></td>
+          <td>UART5</td>
+          <td>Application default</td>
+          <td>General Purpose TTL peripheral interface</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Testing & Communicating via UART:</h3>
+    <pre><span class="comment"># Configure baud rate and raw transmission mode</span>
+<span class="cmd">stty</span> -F /dev/ttymxc1 <span class="param">115200 raw -echo</span>
+
+<span class="comment"># Transmit data frame</span>
+<span class="cmd">echo</span> <span class="str">"TEST_DATA_FRAME"</span> > /dev/ttymxc1
+
+<span class="comment"># Read incoming stream</span>
+<span class="cmd">cat</span> /dev/ttymxc1</pre>
+
+    <h2><span class="sec-num">04</span> SPI Bus Interfaces & Loopback Verification</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Device Node</th>
+          <th>Controller</th>
+          <th>Max Clock Speed</th>
+          <th>Typical Peripherals</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/dev/spidev0.0</code></td>
+          <td>ECSPI1, CS0</td>
+          <td>Up to 20 MHz</td>
+          <td>SPI Flash, EEPROM, DAC/ADC, external sensors</td>
+        </tr>
+        <tr>
+          <td><code>/dev/spidev1.0</code></td>
+          <td>ECSPI2, CS0</td>
+          <td>Up to 20 MHz</td>
+          <td>Secondary SPI bus expansion</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Hardware Loopback Verification (MOSI &harr; MISO):</h3>
+    <p>Short the <strong>MOSI</strong> and <strong>MISO</strong> pins together on the board header and execute:</p>
+    <pre><span class="comment"># Transmit 16-byte reference frame at 1 MHz clock frequency</span>
+<span class="cmd">spidev_test</span> <span class="flag">-D</span> /dev/spidev0.0 <span class="flag">-s</span> 1000000 <span class="flag">-v</span></pre>
+
+    <h2><span class="sec-num">05</span> Dual Ethernet Configuration (systemd-networkd)</h2>
+    <p>The system uses <code>systemd-networkd</code> with dedicated per-interface configuration files:</p>
+    <ul>
+      <li><strong>Port 1 (eth0 / fec1):</strong> <code>/etc/systemd/network/10-eth0.network</code></li>
+      <li><strong>Port 2 (eth1 / fec2):</strong> <code>/etc/systemd/network/11-eth1.network</code></li>
+    </ul>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50%;">Profile A: Static IP Address</th>
+          <th style="width: 50%;">Profile B: Auto-IP (Link-Local) + DHCP (Default)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <pre style="margin: 0; background: #1e293b;">[Match]
+Name=eth0
+
+[Network]
+Address=192.168.1.150/24
+Gateway=192.168.1.1
+DNS=8.8.8.8
+DNS=1.1.1.1
+LinkLocalAddressing=no
+IPv6AcceptRA=no</pre>
+          </td>
+          <td>
+            <pre style="margin: 0; background: #1e293b;">[Match]
+Name=eth0
+
+[Network]
+DHCP=yes
+LinkLocalAddressing=ipv4
+MulticastDNS=yes
+LLMNR=yes
+IPv6AcceptRA=no
+
+[DHCPv4]
+RouteMetric=10</pre>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Applying Network Changes:</h3>
+    <pre><span class="cmd">systemctl restart systemd-networkd</span>
+<span class="cmd">networkctl status eth0</span>
+<span class="cmd">ip addr show eth0</span></pre>
+
+    <div class="footer-note">
+      <span>i.MX6ULL Embedded System Configuration Guide &bull; Client Reference</span>
+      <span>Page 2 of 3</span>
+    </div>
+  </div>
+
+  <!-- PAGE 3: OTA Agent, Display Sleep, USB Auto-Update -->
+  <div class="doc-page">
+    <div class="doc-header">
+      <div class="doc-title-group">
+        <h1>System Services: OTA, Sleep & USB Update</h1>
+        <p>Firmware Upgrades, Power Management & Zero-Network Application Deployment</p>
+      </div>
+      <div class="doc-meta">
+        <div><strong>Platform:</strong> NXP i.MX6ULL</div>
+        <div>Page 3 of 3</div>
+      </div>
+    </div>
+
+    <h2><span class="sec-num">06</span> Remote OTA Update Agent Service</h2>
+    <p>The <code>ota-agent.service</code> daemon runs in the background, polling an HTTP server for firmware update packages (<code>update.swu</code>) and writing them into the alternate rootfs bank (Dual A/B Bank fail-safe architecture with automated rollback).</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Setting</th>
+          <th>Configuration File</th>
+          <th>Default Value</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>OTA_SERVER_URL</code></td>
+          <td><code>/etc/ota-server.conf</code></td>
+          <td><code>http://192.168.1.100:8000</code></td>
+          <td>Base HTTP endpoint hosting <code>version.json</code> &amp; <code>update.swu</code></td>
+        </tr>
+        <tr>
+          <td><code>CHECK_INTERVAL</code></td>
+          <td><code>/etc/ota-server.conf</code></td>
+          <td><code>30</code></td>
+          <td>Background check frequency in seconds</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <pre><span class="comment"># Modify server URL or interval, restart service, and inspect live activity:</span>
+<span class="cmd">vi</span> /etc/ota-server.conf
+<span class="cmd">systemctl restart ota-agent</span>
+<span class="cmd">journalctl -u ota-agent -f</span></pre>
+
+    <h2><span class="sec-num">07</span> Display Sleep & Touch-to-Wake Service</h2>
+    <p>The <code>hmi-sleep.service</code> daemon monitors <code>/dev/input/touchscreen0</code>. When no touch events occur for the configured inactivity period, it blanks the LCD framebuffer and turns off the backlight power. Touching anywhere on the screen immediately wakes the display.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Setting</th>
+          <th>Configuration File</th>
+          <th>Default</th>
+          <th>Supported Values</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>SLEEP_TIMEOUT_SEC</code></td>
+          <td><code>/etc/hmi-sleep.conf</code></td>
+          <td><code>120</code> (2 min)</td>
+          <td><code>0</code> = Always ON (Sleep disabled) &bull; <code>30</code> = 30s &bull; <code>300</code> = 5 min</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <pre><span class="comment"># Change sleep timeout and apply immediately:</span>
+<span class="cmd">sed -i 's/^SLEEP_TIMEOUT_SEC=.*/SLEEP_TIMEOUT_SEC=300/' /etc/hmi-sleep.conf</span>
+<span class="cmd">systemctl restart hmi-sleep</span></pre>
+
+    <h2><span class="sec-num">08</span> USB Flash Drive Auto-Update Workflow</h2>
+    <p>The board's launcher service (<code>qt-auto-launcher.service</code>) automatically checks attached USB flash drives on boot or restart, updates the application binary at <code>/opt/hmi/bin/app</code>, and executes it immediately.</p>
+
+    <div class="callout callout-success">
+      <strong>Format Compatibility:</strong> Format the USB flash drive as <strong>FAT32</strong>. The launcher automatically mounts and handles both partitioned drives (<code>sda1</code>) and whole-disk drives (<code>sda</code>).
+    </div>
+
+    <h3>Step 1: Prepare the USB Flash Drive on Any PC</h3>
+    <p>Copy these <strong>two files</strong> directly into the <strong>root directory</strong> of the FAT32 USB drive:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Type</th>
+          <th>File Content / Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong><code>UpdateCont</code></strong></td>
+          <td>Text File</td>
+          <td>Contains single character: <code>Y</code> (authorizes auto-update)</td>
+        </tr>
+        <tr>
+          <td><strong><code>test</code></strong> or <strong><code>app</code></strong></td>
+          <td>ARM 32-bit Executable</td>
+          <td>New compiled Qt ARM application binary to install</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Step 2: Trigger Update on the Board</h3>
+    <ul>
+      <li><strong>Method A (Power-On / Reboot):</strong> Insert the USB drive and reboot the board. The update applies automatically on boot.</li>
+      <li><strong>Method B (Live Update without Reboot):</strong> Insert the USB drive and run via console:
+        <pre style="margin: 3px 0;"><span class="cmd">systemctl restart qt-auto-launcher</span></pre>
+      </li>
+    </ul>
+
+    <h3>Step 3: Verification</h3>
+    <pre><span class="comment"># 1. View launcher update log</span>
+<span class="cmd">journalctl -u qt-auto-launcher -n 25 --no-pager</span>
+
+<span class="comment"># 2. Confirm binary size and timestamp</span>
+<span class="cmd">ls -l /opt/hmi/bin/app</span></pre>
+
+    <div class="footer-note">
+      <span>i.MX6ULL Embedded System Configuration Guide &bull; Client Reference</span>
+      <span>Page 3 of 3</span>
+    </div>
+  </div>
+
+</body>
+</html>
